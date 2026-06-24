@@ -1630,11 +1630,11 @@ async fn find_ip_cycle_manager(cmc: CycleManagerConfig) {
                     }
                 }
 
-                // Update stats.
+                // Update stats (cumulative across cycles).
                 {
                     let mut stats = cmc.stats.lock().unwrap();
-                    stats.total_scanned = tcp_tested as u64;
-                    stats.total_successful = all_scan_results.iter().filter(|e| e.score > 0).count() as u64;
+                    stats.total_scanned += tcp_tested as u64;
+                    stats.total_successful += all_scan_results.iter().filter(|e| e.score > 0).count() as u64;
                 }
 
                 // Add best IPs to pool immediately.

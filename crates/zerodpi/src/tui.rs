@@ -1590,6 +1590,12 @@ fn draw_ip_scan_progress(
                     .title(" Live results "),
             );
         frame.render_widget(table, chunks[2]);
+
+        let help_line = Line::from(vec![
+            Span::styled(" r ", Style::default().fg(Color::Yellow)), Span::raw("change range  "),
+            Span::styled(" q/Esc ", Style::default().fg(Color::Red)), Span::raw("use results so far  "),
+        ]);
+        frame.render_widget(Paragraph::new(help_line).block(Block::default().borders(Borders::ALL)), chunks[3]);
     })?;
     Ok(())
 }
