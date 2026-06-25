@@ -68,7 +68,7 @@ IP_LIST = "ip_list.txt"
 
 # Maximum time (in seconds) each individual probe may take before
 # it is abandoned.
-SCAN_TIMEOUT_SECS = 10
+SCAN_TIMEOUT_SECS = 5
 
 # How often (in seconds) ZeroDPI re-runs the full SNI scan in the background
 # while the proxy is running. In sni_spoof mode, a better top result switches
@@ -89,13 +89,13 @@ SCAN_OUTPUT = ""
 # ---------------------------------------------------------------------------
 
 # Maximum concurrent SNI probes.
-SNI_MAX_CONCURRENT = 32
+SNI_MAX_CONCURRENT = 64
 
 # Maximum concurrent TCP connections in IP phase 1.
-IP_MAX_P1_CONCURRENT = 64
+IP_MAX_P1_CONCURRENT = 128
 
 # Maximum concurrent TLS probes in IP phase 2.
-IP_MAX_P2_CONCURRENT = 16
+IP_MAX_P2_CONCURRENT = 32
 
 # Maximum bytes downloaded for speed tests.
 SCAN_DOWNLOAD_CAP = 10240
@@ -111,13 +111,13 @@ IPV6_MAX_HOSTS = 65536
 # ---------------------------------------------------------------------------
 
 # Maximum valid TCP latency for scoring (ms).
-TCP_LATENCY_CAP_MS = 1000.0
+TCP_LATENCY_CAP_MS = 500.0
 
 # Maximum valid TLS latency for scoring (ms).
-TLS_LATENCY_CAP_MS = 2000.0
+TLS_LATENCY_CAP_MS = 1000.0
 
 # Maximum valid Time-To-First-Byte for scoring (ms).
-TTFB_CAP_MS = 4000.0
+TTFB_CAP_MS = 2000.0
 
 # Download speed cap for scoring (bytes/sec).
 SPEED_CAP_BPS = 2048000.0
@@ -228,7 +228,7 @@ BYPASS_METHOD = "wrong_seq"
 # Increase this on very high-latency links or slow systems if otherwise valid
 # connections time out during startup.  Lower values fail faster when the
 # bypass cannot complete.  Must be at least 1.
-BYPASS_TIMEOUT_SECS = 4
+BYPASS_TIMEOUT_SECS = 2
 
 # Maximum lifetime (in seconds) for an established relay before ZeroDPI closes
 # it and lets the upstream VPN client reconnect. This is useful for protocols
@@ -252,9 +252,6 @@ NFQUEUE_NUM = 1
 #   "nftables" — use the nft command and an inet table.
 # Windows builds use WinDivert instead, so this setting has no effect there.
 LINUX_FIREWALL_BACKEND = "iptables"
-
-
-
 
 # ---------------------------------------------------------------------------
 # wrong_seq method parameters
@@ -290,9 +287,6 @@ WRONG_SEQ_SET_PSH = true
 # middleboxes accept and inspect the fake ClientHello.  This only affects IPv4
 # packets; IPv6 has no IPv4 Identification field.
 WRONG_SEQ_BUMP_IP_IDENT = true
-
-
-
 
 # ---------------------------------------------------------------------------
 # wrong_checksum method parameters
@@ -560,17 +554,17 @@ PROXY_TEST_SPEED_CAP_BPS = 2048000.0
 # Maximum number of concurrent IP connections maintained in the pool.
 # The proxy distributes VPN traffic across up to this many IPs simultaneously.
 # Dead IPs (0 bytes in a cycle) are replaced with top-scored scan results.
-MAX_IP = 50
+MAX_IP = 10
 
 # Seconds per evaluation cycle.  Every this many seconds the proxy evaluates
 # bytes per IP, removes dead connections, and replaces them with scanned
 # candidates from the IP scanner.
-IP_TEST_TIMEOUT_SECS = 30
+IP_TEST_TIMEOUT_SECS = 10
 
 # When all active IPs have non-zero download bytes, remove the lowest
 # FIND_IP_DROP_COUNT IPs by total download bytes and replace with scanned ones.
 # Set to 0 to disable.
-FIND_IP_DROP_COUNT = 30
+FIND_IP_DROP_COUNT = 5
 
 # Minimum total download bytes to consider an IP alive when not all have bytes.
 FIND_IP_MIN_BYTES = 1024
