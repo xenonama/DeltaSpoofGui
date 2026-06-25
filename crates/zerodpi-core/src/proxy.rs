@@ -1239,6 +1239,23 @@ impl IpByteCountersInner {
             entry.value().store(0, Ordering::Relaxed);
         }
     }
+
+    /// Reset ALL counters (per-cycle + cumulative) for ALL IPs in the pool.
+    /// Used after new IPs are added so all IPs compete fairly from zero.
+    pub fn reset_all_counters(&self) {
+        for entry in self.upload.iter() {
+            entry.value().store(0, Ordering::Relaxed);
+        }
+        for entry in self.download.iter() {
+            entry.value().store(0, Ordering::Relaxed);
+        }
+        for entry in self.cycle_upload.iter() {
+            entry.value().store(0, Ordering::Relaxed);
+        }
+        for entry in self.cycle_download.iter() {
+            entry.value().store(0, Ordering::Relaxed);
+        }
+    }
 }
 
 /// Events emitted by the find_ip proxy for the TUI dashboard.
@@ -1677,8 +1694,8 @@ async fn find_ip_cycle_manager(cmc: CycleManagerConfig) {
             }
         }
 
-        // Reset ALL cycle counters AFTER new IPs are added — fair competition.
-        cmc.byte_counters.reset_cycle_counters();
+        // Reset ALL counters (per-cycle + cumulative) AFTER new IPs are added — fair competition.
+        cmc.byte_counters.reset_all_counters();
         cmc.pool.write().unwrap().update_cycle_counts(cmc.cycle_secs);
 
         info!(
