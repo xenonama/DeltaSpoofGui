@@ -3094,7 +3094,7 @@ pub fn run_top_ip_selection(
         anyhow::bail!("no IPs available to select from");
     }
 
-    all_ips.sort_by_key(|b| std::cmp::Reverse(b.6));
+    all_ips.sort_by_key(|b| std::cmp::Reverse(b.5));
 
     let mut state = TableState::default();
     state.select(Some(0));

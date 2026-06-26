@@ -1609,7 +1609,6 @@ async fn find_ip_cycle_manager(cmc: CycleManagerConfig) {
 
         // If pool still needs IPs, run scan incrementally.
         if cmc.pool.read().unwrap().active_count() < cmc.max_ip {
-            // Take a random subset of candidates for faster scanning.
             let mut candidates = cmc.candidate_ips.clone();
             use std::collections::hash_map::DefaultHasher;
             use std::hash::{Hash, Hasher};
@@ -1625,7 +1624,6 @@ async fn find_ip_cycle_manager(cmc: CycleManagerConfig) {
             let scan_limit = (cmc.max_ip * 20).min(candidates.len());
             candidates.truncate(scan_limit);
 
-            // Run scan with progress channel — add IPs incrementally.
             let (scan_tx, mut scan_rx) = mpsc::unbounded_channel::<IpScanEvent>();
             let scan_cfg = cmc.cfg.clone();
             let scan_sni = cmc.scan_sni.clone();
@@ -1636,15 +1634,15 @@ async fn find_ip_cycle_manager(cmc: CycleManagerConfig) {
                 scan_ip_list(scan_candidates, scan_sni, scan_timeout, scan_cfg, Some(scan_tx)).await
             });
 
-            // Process results incrementally — every 2 seconds check for new results.
             let mut scan_done = false;
             let mut all_scan_results: Vec<IpProbeEntry> = Vec::new();
             let mut tcp_tested: usize = 0;
+            let mut prev_tcp: usize = 0;
+            let mut prev_ok: usize = 0;
+
             while !scan_done {
-                // Check if scan is done.
                 if scan_handle.is_finished() {
                     scan_done = true;
-                    // Drain remaining results.
                     while let Ok(event) = scan_rx.try_recv() {
                         match event {
                             IpScanEvent::TcpDone { tcp_tested: t } => { tcp_tested = t; }
@@ -1652,7 +1650,6 @@ async fn find_ip_cycle_manager(cmc: CycleManagerConfig) {
                         }
                     }
                 } else {
-                    // Wait a bit for new results.
                     tokio::time::sleep(Duration::from_millis(2000)).await;
                     while let Ok(event) = scan_rx.try_recv() {
                         match event {
@@ -1662,16 +1659,20 @@ async fn find_ip_cycle_manager(cmc: CycleManagerConfig) {
                     }
                 }
 
-                // Update stats (cumulative across cycles).
+                // Update stats with DELTA only.
+                let cur_ok = all_scan_results.iter().filter(|e| e.score > 0).count();
+                let delta_tcp = tcp_tested.saturating_sub(prev_tcp);
+                let delta_ok = cur_ok.saturating_sub(prev_ok);
                 {
                     let mut stats = cmc.stats.lock().unwrap();
-                    stats.total_scanned += tcp_tested as u64;
-                    stats.total_successful += all_scan_results.iter().filter(|e| e.score > 0).count() as u64;
+                    stats.total_scanned += delta_tcp as u64;
+                    stats.total_successful += delta_ok as u64;
                 }
+                prev_tcp = tcp_tested;
+                prev_ok = cur_ok;
 
                 // Add best IPs to pool immediately.
                 if cmc.pool.read().unwrap().is_fixed() {
-                    debug!("find_ip: pool fixed during scan; stopping");
                     scan_handle.abort();
                     break;
                 }
@@ -1681,7 +1682,6 @@ async fn find_ip_cycle_manager(cmc: CycleManagerConfig) {
                     let active_now: Vec<IpAddr> = p.active_ips().to_vec();
                     for entry in &all_scan_results {
                         if p.active_count() >= cmc.max_ip {
-                            // Cache remaining for later.
                             if !active_now.contains(&entry.ip) && !pre_scanned.iter().any(|e| e.ip == entry.ip) {
                                 pre_scanned.push(entry.clone());
                             }
@@ -1701,7 +1701,6 @@ async fn find_ip_cycle_manager(cmc: CycleManagerConfig) {
                     pre_scanned.sort_by_key(|b| std::cmp::Reverse(b.score));
                 }
 
-                // If pool is full, stop scanning.
                 if cmc.pool.read().unwrap().active_count() >= cmc.max_ip {
                     scan_handle.abort();
                     break;
