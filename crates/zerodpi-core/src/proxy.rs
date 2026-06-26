@@ -1230,15 +1230,10 @@ impl IpByteCountersInner {
     pub fn cycle_download_bytes(&self, ip: &IpAddr) -> u64 {
         self.cycle_download.get(ip).map(|d| d.load(Ordering::Relaxed)).unwrap_or(0)
     }
-    /// Reset ALL counters (per-cycle + cumulative) for ALL IPs.
-    /// Called after new IPs are added so all IPs start fresh.
-    pub fn reset_all_counters(&self) {
-        for entry in self.upload.iter() {
-            entry.value().store(0, Ordering::Relaxed);
-        }
-        for entry in self.download.iter() {
-            entry.value().store(0, Ordering::Relaxed);
-        }
+    /// Reset per-cycle counters (↑/Cycle, ↓/Cycle) only.
+    /// Cumulative counters (↑ Total, ↓ Total) are NEVER reset.
+    /// Called after new IPs are added for fair cycle competition.
+    pub fn reset_cycle_counters(&self) {
         for entry in self.cycle_upload.iter() {
             entry.value().store(0, Ordering::Relaxed);
         }
@@ -1684,8 +1679,9 @@ async fn find_ip_cycle_manager(cmc: CycleManagerConfig) {
             }
         }
 
-        // Reset ALL counters (per-cycle + cumulative) AFTER new IPs are added.
-        cmc.byte_counters.reset_all_counters();
+        // Reset per-cycle counters (↑/Cycle, ↓/Cycle) AFTER new IPs are added.
+        // Cumulative Total is NEVER reset — it tracks lifetime activity.
+        cmc.byte_counters.reset_cycle_counters();
         cmc.pool.write().unwrap().update_cycle_counts(cmc.cycle_secs);
 
         info!(
