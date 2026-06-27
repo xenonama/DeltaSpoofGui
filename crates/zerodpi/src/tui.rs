@@ -2840,7 +2840,6 @@ pub fn run_find_ip_dashboard(
     cfg: &Config,
     pool: &std::sync::Arc<std::sync::RwLock<zerodpi_core::proxy::IpPool>>,
     byte_counters: &zerodpi_core::proxy::IpByteCounters,
-    stats: &std::sync::Arc<std::sync::Mutex<zerodpi_core::proxy::CycleManagerStats>>,
 ) -> anyhow::Result<FindIpAction> {
     let (sni, domain_ip, max_ip) = match info {
         DashboardInfo::FindIp { sni, domain_ip, max_ip } => (sni.clone(), *domain_ip, *max_ip),
@@ -2897,13 +2896,7 @@ pub fn run_find_ip_dashboard(
         // Sort by total bytes descending.
         ip_rows.sort_by_key(|b| std::cmp::Reverse(b.3));
 
-        // Read stats for header display.
-        let (scanned, successful, removed) = {
-            let s = stats.lock().unwrap();
-            (s.total_scanned, s.total_successful, s.total_removed)
-        };
-
-        draw_find_ip_live(terminal, &sni, domain_ip, max_ip, cycle_active_count, is_fixed, &ip_rows, start, scanned, successful, removed)?;
+        draw_find_ip_live(terminal, &sni, domain_ip, max_ip, cycle_active_count, is_fixed, &ip_rows, start)?;
 
         if event::poll(Duration::from_millis(200))? {
             if let Event::Key(k) = event::read()? {
@@ -2929,7 +2922,6 @@ fn draw_find_ip_live(
     active_count: usize, is_fixed: bool,
     ip_rows: &[(IpAddr, u64, u64, u64, u64, u64, Duration)],
     start: Instant,
-    scanned: u64, successful: u64, removed: u64,
 ) -> anyhow::Result<()> {
     terminal.draw(|frame| {
         let area = frame.area();
@@ -2996,15 +2988,6 @@ fn draw_find_ip_live(
                     Span::raw("   "),
                     Span::styled("Uptime: ", label_style()),
                     Span::styled(uptime, Style::default().fg(Color::White)),
-                    Span::raw("   "),
-                    Span::styled("Scanned: ", label_style()),
-                    Span::styled(scanned.to_string(), Style::default().fg(Color::White)),
-                    Span::raw("   "),
-                    Span::styled("OK: ", label_style()),
-                    Span::styled(successful.to_string(), Style::default().fg(Color::Green)),
-                    Span::raw("   "),
-                    Span::styled("Removed: ", label_style()),
-                    Span::styled(removed.to_string(), Style::default().fg(Color::Red)),
                 ]),
                 Line::from(vec![
                     Span::styled("Press ", label_style()),

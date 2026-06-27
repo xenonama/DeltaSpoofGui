@@ -1391,7 +1391,6 @@ fn find_ip_main(
             let proxy_pool = pool.clone();
             let proxy_counters = byte_counters.clone();
             let proxy_stats = Arc::new(std::sync::Mutex::new(CycleManagerStats::new()));
-            let dash_stats = proxy_stats.clone();
 
             proxy_handle = Some(rt.spawn(async move {
                 run_find_ip_proxy(
@@ -1437,7 +1436,6 @@ fn find_ip_main(
                     &cfg,
                     &pool,
                     &byte_counters,
-                    &dash_stats,
                 );
                 tui::leave_tui(terminal)?;
 
