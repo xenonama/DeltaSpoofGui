@@ -2918,7 +2918,7 @@ pub fn run_find_ip_dashboard(
 
 #[allow(clippy::too_many_arguments)]
 fn draw_find_ip_live(
-    terminal: &mut Term, sni: &str, domain_ip: Ipv4Addr, max_ip: usize,
+    terminal: &mut Term, sni: &str, _domain_ip: Ipv4Addr, max_ip: usize,
     active_count: usize, is_fixed: bool,
     ip_rows: &[(IpAddr, u64, u64, u64, u64, u64, Duration)],
     start: Instant,
@@ -2942,9 +2942,6 @@ fn draw_find_ip_live(
                     Span::raw("   "),
                     Span::styled("SNI: ", label_style()),
                     Span::styled(sni.to_string(), Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
-                    Span::raw("   "),
-                    Span::styled("Selected IP: ", label_style()),
-                    Span::styled(domain_ip.to_string(), Style::default().fg(Color::Green).add_modifier(Modifier::BOLD)),
                     Span::raw("   "),
                     Span::styled("Uptime: ", label_style()),
                     Span::styled(uptime, Style::default().fg(Color::White)),
