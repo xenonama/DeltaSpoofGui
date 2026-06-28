@@ -1605,67 +1605,11 @@ async fn find_ip_cycle_manager(cmc: CycleManagerConfig) {
     }
 
     loop {
-        // Sleep half cycle, then start scanning for replacements in background.
-        let half_cycle = cycle_interval / 2;
-        tokio::time::sleep(half_cycle).await;
+        tokio::time::sleep(cycle_interval).await;
 
         if cmc.pool.read().unwrap().is_fixed() {
             debug!("find_ip: pool is fixed; cycle manager stopping");
             break;
-        }
-
-        // Start background scan for replacement IPs (runs during second half of cycle).
-        let scan_candidates = cmc.candidate_ips.clone();
-        let scan_sni_inner = cmc.scan_sni.clone();
-        let scan_timeout_inner = cmc.scan_timeout;
-        let scan_cfg_inner = cmc.cfg.clone();
-        // Pre-scan: fire and forget, results stored in pre_scanned via a shared channel.
-        let pre_scan_handle = tokio::spawn(async move {
-            let (scan_tx, mut scan_rx) = mpsc::unbounded_channel::<IpScanEvent>();
-            let scan_cfg = scan_cfg_inner;
-            let scan_sni = scan_sni_inner;
-            let scan_timeout = scan_timeout_inner;
-            let candidates = scan_candidates;
-            let handle = tokio::spawn(async move {
-                scan_ip_list(candidates, scan_sni, scan_timeout, scan_cfg, Some(scan_tx)).await
-            });
-            // Collect results as they come.
-            let mut results: Vec<IpProbeEntry> = Vec::new();
-            loop {
-                if handle.is_finished() {
-                    while let Ok(event) = scan_rx.try_recv() {
-                        if let IpScanEvent::ProbeComplete(entry) = event {
-                            results.push(entry);
-                        }
-                    }
-                    break;
-                }
-                tokio::time::sleep(Duration::from_millis(500)).await;
-                while let Ok(event) = scan_rx.try_recv() {
-                    if let IpScanEvent::ProbeComplete(entry) = event {
-                        results.push(entry);
-                    }
-                }
-            }
-            results
-        });
-
-        // Sleep remaining half cycle.
-        tokio::time::sleep(half_cycle).await;
-
-        if cmc.pool.read().unwrap().is_fixed() {
-            debug!("find_ip: pool is fixed; cycle manager stopping");
-            break;
-        }
-
-        // Collect pre-scan results.
-        if let Ok(results) = pre_scan_handle.await {
-            for entry in results {
-                if !pre_scanned.iter().any(|e| e.ip == entry.ip) {
-                    pre_scanned.push(entry);
-                }
-            }
-            pre_scanned.sort_by_key(|b| std::cmp::Reverse(b.score));
         }
 
         cycle_num += 1;
