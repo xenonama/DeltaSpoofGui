@@ -299,7 +299,7 @@ fn main() -> Result<()> {
         let path = sni_list_path.clone();
         let cfg_clone = cfg.clone();
         let entries = if no_tui {
-            let entries = rt.block_on(scan_sni_list(&path, scan_timeout, cfg_clone, None))?;
+            let entries = rt.block_on(scan_sni_list(&path, scan_timeout, cfg_clone, None, None))?;
             log_sni_scan_results("headless scan", &entries);
             entries
         } else {
@@ -492,14 +492,16 @@ async fn scan_sni_list_with_progress(
     let path_owned = path.to_owned();
 
     let (tx, mut rx) = mpsc::unbounded_channel::<SniProbeEntry>();
+    let dns_done = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let dns_done_tui = dns_done.clone();
 
     // Spawn scanner; it sends each result over `tx` as it arrives.
     let cfg_clone = cfg.clone();
     let scan_handle =
-        tokio::spawn(async move { scan_sni_list(&path_owned, timeout, cfg_clone, Some(tx)).await });
+        tokio::spawn(async move { scan_sni_list(&path_owned, timeout, cfg_clone, Some(tx), Some(dns_done)).await });
 
     let mut terminal = tui::enter_tui()?;
-    let (arrived, aborted) = tui::run_scan_progress(&mut terminal, &mut rx, total_hostnames)?;
+    let (arrived, aborted) = tui::run_scan_progress(&mut terminal, &mut rx, total_hostnames, &dns_done_tui)?;
     tui::leave_tui(terminal)?;
 
     // Obtain the authoritative sorted list.
@@ -607,7 +609,7 @@ async fn background_rescan(
             debug!("background rescan starting");
         }
         let cfg_clone = cfg.clone();
-        match scan_sni_list(&path, scan_timeout, cfg_clone, None).await {
+        match scan_sni_list(&path, scan_timeout, cfg_clone, None, None).await {
             Ok(entries) => {
                 if headless {
                     info!(
@@ -1192,7 +1194,7 @@ fn find_ip_main(
             let path = sni_list_path.clone();
             let cfg_clone = cfg.clone();
             let entries = if no_tui {
-                let entries = rt.block_on(scan_sni_list(&path, scan_timeout, cfg_clone, None))?;
+                let entries = rt.block_on(scan_sni_list(&path, scan_timeout, cfg_clone, None, None))?;
                 log_sni_scan_results("find_ip: headless scan", &entries);
                 entries
             } else {
@@ -1645,14 +1647,15 @@ fn sni_scan_main(
     let path = sni_list_path.clone();
     let cfg_clone = cfg.clone();
     let sorted = if no_tui {
-        rt.block_on(scan_sni_list(&path, scan_timeout, cfg_clone, None))?
+        rt.block_on(scan_sni_list(&path, scan_timeout, cfg_clone, None, None))?
     } else {
         let (tx, mut rx) = mpsc::unbounded_channel::<SniProbeEntry>();
+        let dns_done = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
         let scan_handle =
-            rt.spawn(async move { scan_sni_list(&path, scan_timeout, cfg_clone, Some(tx)).await });
+            rt.spawn(async move { scan_sni_list(&path, scan_timeout, cfg_clone, Some(tx), None).await });
 
         let mut terminal = tui::enter_tui()?;
-        let (arrived, aborted) = tui::run_scan_progress(&mut terminal, &mut rx, total_hostnames)?;
+        let (arrived, aborted) = tui::run_scan_progress(&mut terminal, &mut rx, total_hostnames, &dns_done)?;
         tui::leave_tui(terminal)?;
 
         if scan_handle.is_finished() {
@@ -1860,15 +1863,16 @@ fn proxy_scan_main(
     let path = sni_list_path.clone();
     let cfg_clone = cfg.clone();
     let phase1_sorted = if no_tui {
-        rt.block_on(scan_sni_list(&path, scan_timeout, cfg_clone, None))?
+        rt.block_on(scan_sni_list(&path, scan_timeout, cfg_clone, None, None))?
     } else {
         let total_hostnames = count_hostnames(&sni_list_path);
         let (tx1, mut rx1) = mpsc::unbounded_channel::<SniProbeEntry>();
+        let dns_done = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
         let scan_handle =
-            rt.spawn(async move { scan_sni_list(&path, scan_timeout, cfg_clone, Some(tx1)).await });
+            rt.spawn(async move { scan_sni_list(&path, scan_timeout, cfg_clone, Some(tx1), None).await });
 
         let mut terminal = tui::enter_tui()?;
-        let (arrived, aborted) = tui::run_scan_progress(&mut terminal, &mut rx1, total_hostnames)?;
+        let (arrived, aborted) = tui::run_scan_progress(&mut terminal, &mut rx1, total_hostnames, &dns_done)?;
         tui::leave_tui(terminal)?;
 
         if scan_handle.is_finished() {

@@ -195,6 +195,7 @@ pub fn run_scan_progress(
     terminal: &mut Term,
     rx: &mut mpsc::UnboundedReceiver<SniProbeEntry>,
     total_hostnames: usize,
+    dns_done: &std::sync::atomic::AtomicUsize,
 ) -> anyhow::Result<(Vec<SniProbeEntry>, bool)> {
     let mut arrived: Vec<SniProbeEntry> = Vec::new();
 
@@ -208,13 +209,13 @@ pub fn run_scan_progress(
                 Err(mpsc::error::TryRecvError::Empty) => break,
                 Err(mpsc::error::TryRecvError::Disconnected) => {
                     // Scanner finished – draw one final frame and return.
-                    draw_scan_progress(terminal, &arrived, total_hostnames)?;
+                    draw_scan_progress(terminal, &arrived, total_hostnames, dns_done)?;
                     return Ok((arrived, false));
                 }
             }
         }
 
-        draw_scan_progress(terminal, &arrived, total_hostnames)?;
+        draw_scan_progress(terminal, &arrived, total_hostnames, dns_done)?;
 
         // Poll for user input (Ctrl-C / q to abort).
         if event::poll(Duration::from_millis(100))? {
@@ -235,8 +236,10 @@ fn draw_scan_progress(
     terminal: &mut Term,
     arrived: &[SniProbeEntry],
     total_hostnames: usize,
+    dns_done: &std::sync::atomic::AtomicUsize,
 ) -> anyhow::Result<()> {
     let done = arrived.len();
+    let dns = dns_done.load(std::sync::atomic::Ordering::Relaxed);
     terminal.draw(|frame| {
         let area = frame.area();
         let chunks = Layout::default()
@@ -270,7 +273,7 @@ fn draw_scan_progress(
             .block(Block::default().borders(Borders::ALL).title(" Progress "))
             .gauge_style(Style::default().fg(Color::Green))
             .ratio(ratio)
-            .label(format!("{done} probes done (~{total_hostnames} hostnames)"));
+            .label(format!("{dns}/{total_hostnames} DNS resolved  |  {done} probes done"));
         frame.render_widget(gauge, chunks[1]);
 
         // Results so far

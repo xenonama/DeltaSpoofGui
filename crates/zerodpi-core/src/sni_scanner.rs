@@ -28,6 +28,7 @@
 
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::path::Path;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
@@ -192,6 +193,7 @@ pub async fn scan_sni_list(
     timeout: Duration,
     config: Arc<crate::config::Config>,
     progress_tx: Option<mpsc::UnboundedSender<SniProbeEntry>>,
+    dns_done: Option<Arc<AtomicUsize>>,
 ) -> anyhow::Result<Vec<SniProbeEntry>> {
     let content = std::fs::read_to_string(path)
         .map_err(|e| anyhow::anyhow!("cannot read {}: {e}", path.display()))?;
@@ -208,14 +210,16 @@ pub async fn scan_sni_list(
 
     let connector = Arc::new(make_tls_connector());
     let semaphore = Arc::new(Semaphore::new(config.SNI_MAX_CONCURRENT));
+    let dns_counter = dns_done.unwrap_or_else(|| Arc::new(AtomicUsize::new(0)));
     let mut handles = Vec::new();
     for sni in hostnames {
         let connector = connector.clone();
         let tx = progress_tx.clone();
         let sem = semaphore.clone();
         let cfg = config.clone();
+        let dc = dns_counter.clone();
         handles.push(tokio::spawn(async move {
-            probe_sni(sni, timeout, cfg, connector, tx, sem).await
+            probe_sni(sni, timeout, cfg, connector, tx, sem, dc).await
         }));
     }
 
@@ -269,8 +273,10 @@ async fn probe_sni(
     connector: Arc<TlsConnector>,
     progress_tx: Option<mpsc::UnboundedSender<SniProbeEntry>>,
     semaphore: Arc<Semaphore>,
+    dns_done: Arc<AtomicUsize>,
 ) -> Vec<SniProbeEntry> {
     let addrs: Vec<Ipv4Addr> = resolve_hostname(&sni, timeout).await;
+    dns_done.fetch_add(1, Ordering::Relaxed);
     if addrs.is_empty() {
         debug!(sni = %sni, "DNS resolution failed (all methods)");
         return Vec::new();
