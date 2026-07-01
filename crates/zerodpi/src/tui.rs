@@ -2949,21 +2949,23 @@ fn draw_find_ip_live(
             ];
             frame.render_widget(Paragraph::new(header_lines).block(Block::default().borders(Borders::ALL).title(" DeltaSpoof — Find IP (Fixed) ")), chunks[0]);
 
-            let rows: Vec<Row> = ip_rows.iter().map(|(ip, cup, cdown, total, conns, cycles, duration)| {
+            let fixed_ip: IpAddr = _domain_ip.into();
+            let fixed_rows: Vec<&(IpAddr, u64, u64, u64, u64, u64, Duration)> = ip_rows.iter().filter(|(ip, _, _, _, _, _, _)| *ip == fixed_ip).collect();
+
+            let rows: Vec<Row> = fixed_rows.iter().map(|(ip, cup, cdown, total, conns, _, duration)| {
                 Row::new(vec![
                     Cell::from(ip.to_string()).style(Style::default().fg(Color::Green).add_modifier(Modifier::BOLD)),
                     Cell::from(format!("{}/C", fmt_bytes(*cup))).style(Style::default().fg(Color::Cyan)),
                     Cell::from(format!("{}/C", fmt_bytes(*cdown))).style(Style::default().fg(Color::Green)),
                     Cell::from(fmt_bytes(*total)).style(Style::default().fg(Color::Yellow)),
                     Cell::from(conns.to_string()),
-                    Cell::from(cycles.to_string()),
                     Cell::from(fmt_uptime(*duration)),
                 ])
             }).collect();
 
-            let widths = [Constraint::Length(20), Constraint::Length(12), Constraint::Length(12), Constraint::Length(10), Constraint::Length(8), Constraint::Length(8), Constraint::Min(8)];
+            let widths = [Constraint::Length(20), Constraint::Length(12), Constraint::Length(12), Constraint::Length(10), Constraint::Length(8), Constraint::Min(8)];
             let table = Table::new(rows, widths)
-                .header(Row::new(vec!["IP Address", "↑/Cycle", "↓/Cycle", "Total", "Conns", "Cycles", "Duration"]).style(Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD | Modifier::UNDERLINED)))
+                .header(Row::new(vec!["IP Address", "↑/Cycle", "↓/Cycle", "Total", "Conns", "Duration"]).style(Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD | Modifier::UNDERLINED)))
                 .block(Block::default().borders(Borders::ALL).title(" Active Connection "));
             frame.render_widget(table, chunks[1]);
         } else {
