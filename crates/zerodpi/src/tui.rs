@@ -2949,10 +2949,7 @@ fn draw_find_ip_live(
             ];
             frame.render_widget(Paragraph::new(header_lines).block(Block::default().borders(Borders::ALL).title(" DeltaSpoof — Find IP (Fixed) ")), chunks[0]);
 
-            let fixed_ip: IpAddr = _domain_ip.into();
-            let fixed_rows: Vec<&(IpAddr, u64, u64, u64, u64, u64, Duration)> = ip_rows.iter().filter(|(ip, _, _, _, _, _, _)| *ip == fixed_ip).collect();
-
-            let rows: Vec<Row> = fixed_rows.iter().map(|(ip, cup, cdown, total, conns, _, duration)| {
+            let rows: Vec<Row> = ip_rows.iter().take(1).map(|(ip, cup, cdown, total, conns, _, duration)| {
                 Row::new(vec![
                     Cell::from(ip.to_string()).style(Style::default().fg(Color::Green).add_modifier(Modifier::BOLD)),
                     Cell::from(format!("{}/C", fmt_bytes(*cup))).style(Style::default().fg(Color::Cyan)),
