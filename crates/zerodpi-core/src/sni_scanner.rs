@@ -38,6 +38,19 @@ use tokio_rustls::rustls::pki_types::ServerName;
 use tokio_rustls::TlsConnector;
 use tracing::{debug, warn};
 
+use std::sync::OnceLock;
+
+type HickoryResolver = hickory_resolver::TokioAsyncResolver;
+
+fn shared_hickory_resolver() -> &'static HickoryResolver {
+    static RESOLVER: OnceLock<HickoryResolver> = OnceLock::new();
+    RESOLVER.get_or_init(|| {
+        use hickory_resolver::config::*;
+        let config = ResolverConfig::google();
+        HickoryResolver::tokio(config, ResolverOpts::default())
+    })
+}
+
 /// Resolve hostname to IPv4 addresses using multiple methods.
 /// 1. tokio async DNS
 /// 2. std::net blocking DNS
@@ -76,11 +89,7 @@ pub async fn resolve_hostname(hostname: &str, timeout: Duration) -> Vec<Ipv4Addr
 
     // Try 3: hickory-resolver (pure Rust DNS — works on Android/Termux)
     {
-        use hickory_resolver::config::*;
-        use hickory_resolver::TokioAsyncResolver;
-
-        let mut config = ResolverConfig::google();
-        let resolver = TokioAsyncResolver::tokio(config, ResolverOpts::default());
+        let resolver = shared_hickory_resolver();
         if let Ok(response) = tokio::time::timeout(timeout, resolver.ipv4_lookup(hostname)).await {
             if let Ok(ips) = response {
                 let v: Vec<Ipv4Addr> = ips.iter().map(|a| a.0).collect();
