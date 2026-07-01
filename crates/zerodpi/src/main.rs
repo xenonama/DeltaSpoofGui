@@ -454,15 +454,7 @@ fn main() -> Result<()> {
 /// Resolve `sni` to all IPv4 addresses and return a synthetic probe entry for
 /// each one (no TCP/TLS/HTTP checks are performed).
 async fn resolve_single_sni(sni: &str) -> anyhow::Result<Vec<SniProbeEntry>> {
-    let target = format!("{sni}:443");
-    let addrs: Vec<Ipv4Addr> = tokio::net::lookup_host(&target)
-        .await
-        .with_context(|| format!("DNS lookup for {sni}"))?
-        .filter_map(|sa| match sa.ip() {
-            IpAddr::V4(v4) => Some(v4),
-            IpAddr::V6(_) => None,
-        })
-        .collect();
+    let addrs = zerodpi_core::sni_scanner::resolve_hostname(sni, std::time::Duration::from_secs(10)).await;
 
     if addrs.is_empty() {
         anyhow::bail!("no IPv4 addresses found for {sni}");

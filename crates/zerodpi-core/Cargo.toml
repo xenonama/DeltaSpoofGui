@@ -21,6 +21,7 @@ rustls.workspace = true
 tokio-rustls.workspace = true
 webpki-roots.workspace = true
 ipnet.workspace = true
+hickory-resolver.workspace = true
 
 [dev-dependencies]
 tempfile.workspace = true
