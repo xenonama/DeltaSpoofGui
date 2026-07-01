@@ -208,21 +208,67 @@ async fn probe_sni(
 ) -> Vec<SniProbeEntry> {
     let lookup_target = format!("{}:443", sni);
     // DNS resolution is covered by the same per-probe timeout.
+    // Try tokio async DNS first; fall back to blocking std::net on platforms
+    // where tokio::net::lookup_host does not work (e.g. Termux/Android).
     let addrs: Vec<Ipv4Addr> =
         match tokio::time::timeout(timeout, tokio::net::lookup_host(&lookup_target)).await {
-            Ok(Ok(iter)) => iter
-                .filter_map(|sa| match sa.ip() {
-                    IpAddr::V4(v4) => Some(v4),
-                    IpAddr::V6(_) => None,
-                })
-                .collect(),
+            Ok(Ok(iter)) => {
+                let v: Vec<Ipv4Addr> = iter
+                    .filter_map(|sa| match sa.ip() {
+                        IpAddr::V4(v4) => Some(v4),
+                        IpAddr::V6(_) => None,
+                    })
+                    .collect();
+                if v.is_empty() {
+                    // Fallback: blocking DNS
+                    use std::net::ToSocketAddrs;
+                    match lookup_target.to_socket_addrs() {
+                        Ok(iter2) => iter2
+                            .filter_map(|sa| match sa.ip() {
+                                IpAddr::V4(v4) => Some(v4),
+                                IpAddr::V6(_) => None,
+                            })
+                            .collect(),
+                        Err(e) => {
+                            debug!(sni = %sni, error = %e, "DNS resolution failed (both tokio and std)");
+                            return Vec::new();
+                        }
+                    }
+                } else {
+                    v
+                }
+            }
             Ok(Err(e)) => {
-                debug!(sni = %sni, error = %e, "DNS resolution failed");
-                return Vec::new();
+                debug!(sni = %sni, error = %e, "DNS resolution failed (tokio), trying std fallback");
+                use std::net::ToSocketAddrs;
+                match lookup_target.to_socket_addrs() {
+                    Ok(iter2) => iter2
+                        .filter_map(|sa| match sa.ip() {
+                            IpAddr::V4(v4) => Some(v4),
+                            IpAddr::V6(_) => None,
+                        })
+                        .collect(),
+                    Err(e2) => {
+                        debug!(sni = %sni, error = %e2, "DNS resolution failed (std fallback too)");
+                        return Vec::new();
+                    }
+                }
             }
             Err(_) => {
-                debug!(sni = %sni, timeout = ?timeout, "DNS resolution timed out");
-                return Vec::new();
+                debug!(sni = %sni, timeout = ?timeout, "DNS resolution timed out (tokio), trying std fallback");
+                use std::net::ToSocketAddrs;
+                match lookup_target.to_socket_addrs() {
+                    Ok(iter2) => iter2
+                        .filter_map(|sa| match sa.ip() {
+                            IpAddr::V4(v4) => Some(v4),
+                            IpAddr::V6(_) => None,
+                        })
+                        .collect(),
+                    Err(e) => {
+                        debug!(sni = %sni, error = %e, "DNS resolution timed out (std fallback too)");
+                        return Vec::new();
+                    }
+                }
             }
         };
 
