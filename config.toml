@@ -570,9 +570,15 @@ FIND_IP_DROP_COUNT = 5
 # auto_spoof mode
 # ---------------------------------------------------------------------------
 # Number of domains to serve simultaneously.  Each IP connects to ALL domains.
-# Total connections = MAX_IP × MAX_DOMAIN.  MAX_IP is defined in find_ip section.
+# Total connections = MAX_IP_AUTO_SPOOF × MAX_DOMAIN.
 # Default: 5.
 MAX_DOMAIN = 5
+
+# Maximum number of IPs in the auto_spoof pool.
+# Each IP connects to ALL domains.
+# Total connections = MAX_IP_AUTO_SPOOF × MAX_DOMAIN.
+# Default: 10.
+MAX_IP_AUTO_SPOOF = 10
 
 # Seconds per evaluation cycle.  Every this many seconds the proxy evaluates
 # bytes per (domain, IP) pair, removes dead connections, and replaces them

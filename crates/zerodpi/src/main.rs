@@ -1491,7 +1491,7 @@ fn auto_spoof_main(
     no_tui: bool,
 ) -> Result<()> {
     let max_domain = cfg.MAX_DOMAIN;
-    let max_ip = cfg.MAX_IP;
+    let max_ip = cfg.MAX_IP_AUTO_SPOOF;
 
     let sni_list_path = {
         let raw = PathBuf::from(&cfg.SNI_LIST);

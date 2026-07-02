@@ -489,6 +489,11 @@ pub struct Config {
     #[serde(default = "default_auto_spoof_cycle_secs")]
     pub AUTO_SPOOF_CYCLE_SECS: u64,
 
+    /// Maximum number of IPs in the auto_spoof pool.
+    /// Default: `10`.
+    #[serde(default = "default_max_ip_auto_spoof")]
+    pub MAX_IP_AUTO_SPOOF: usize,
+
     /// Max IPs to drop per cycle in auto_spoof mode.  Set to 0 to disable.
     /// Default: `5`.
     #[serde(default = "default_auto_spoof_drop_count")]
@@ -629,6 +634,9 @@ fn default_find_ip_min_bytes() -> u64 {
     1024
 }
 fn default_auto_spoof_cycle_secs() -> u64 {
+    10
+}
+fn default_max_ip_auto_spoof() -> usize {
     10
 }
 fn default_auto_spoof_drop_count() -> usize {
