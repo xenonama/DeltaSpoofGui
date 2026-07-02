@@ -3274,6 +3274,7 @@ pub fn run_top_ip_selection(
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AutoSpoofAction {
     Quit,
+    Pin,
 }
 
 pub fn run_auto_spoof_dashboard(
@@ -3379,6 +3380,8 @@ pub fn run_auto_spoof_dashboard(
             frame.render_widget(table, chunks[1]);
 
             let footer = Paragraph::new(Line::from(vec![
+                Span::styled("s", Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)),
+                Span::styled(" pin connection   ", label_style()),
                 Span::styled("q/Esc", Style::default().fg(Color::Red).add_modifier(Modifier::BOLD)),
                 Span::styled(" quit", label_style()),
             ])).block(Block::default().borders(Borders::ALL));
@@ -3391,6 +3394,90 @@ pub fn run_auto_spoof_dashboard(
                     match k.code {
                         KeyCode::Char('q') | KeyCode::Char('Q') | KeyCode::Esc => return Ok(AutoSpoofAction::Quit),
                         KeyCode::Char('c') if k.modifiers.contains(KeyModifiers::CONTROL) => return Ok(AutoSpoofAction::Quit),
+                        KeyCode::Char('s') | KeyCode::Char('S') => return Ok(AutoSpoofAction::Pin),
+                        _ => {}
+                    }
+                }
+            }
+        }
+    }
+}
+
+/// Pin selection: show all domain:IP pairs, user picks one.
+pub fn run_auto_spoof_pin_selection(
+    terminal: &mut Term,
+    domains: &[String],
+    pool: &std::sync::Arc<std::sync::RwLock<zerodpi_core::proxy::IpPool>>,
+) -> anyhow::Result<Option<(String, IpAddr)>> {
+    let active_ips = pool.read().unwrap().active_ips().to_vec();
+    let pairs: Vec<(String, IpAddr)> = domains.iter()
+        .flat_map(|d| active_ips.iter().map(move |&ip| (d.clone(), ip)))
+        .collect();
+
+    if pairs.is_empty() {
+        return Ok(None);
+    }
+
+    let mut state = TableState::default();
+    state.select(Some(0));
+
+    loop {
+        terminal.draw(|frame| {
+            let area = frame.area();
+            let chunks = Layout::default()
+                .direction(Direction::Vertical)
+                .margin(1)
+                .constraints([
+                    Constraint::Length(3),
+                    Constraint::Min(5),
+                    Constraint::Length(3),
+                ])
+                .split(area);
+
+            let header = Paragraph::new(Line::from(vec![
+                Span::styled("Select a connection to pin (", label_style()),
+                Span::styled(pairs.len().to_string(), Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
+                Span::styled(" options)", label_style()),
+            ])).block(Block::default().borders(Borders::ALL).title(" AutoSpoof — Pin Connection "));
+            frame.render_widget(header, chunks[0]);
+
+            let rows: Vec<Row> = pairs.iter().map(|(domain, ip)| {
+                Row::new(vec![
+                    Cell::from(format!("{}:{}", domain, ip)),
+                ])
+            }).collect();
+            let widths = [Constraint::Min(30)];
+            let table = Table::new(rows, widths)
+                .header(Row::new(vec!["Connection (domain:IP)"]).style(Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD | Modifier::UNDERLINED)))
+                .block(Block::default().borders(Borders::ALL).title(" Connections "));
+            frame.render_stateful_widget(table, chunks[1], &mut state);
+
+            let footer = Paragraph::new(Line::from(vec![
+                Span::styled("Enter", Style::default().fg(Color::Green).add_modifier(Modifier::BOLD)),
+                Span::styled(" pin  ", label_style()),
+                Span::styled("q/Esc", Style::default().fg(Color::Red).add_modifier(Modifier::BOLD)),
+                Span::styled(" cancel", label_style()),
+            ])).block(Block::default().borders(Borders::ALL));
+            frame.render_widget(footer, chunks[2]);
+        })?;
+
+        if event::poll(Duration::from_millis(200))? {
+            if let Event::Key(k) = event::read()? {
+                if k.kind == KeyEventKind::Press {
+                    match k.code {
+                        KeyCode::Up | KeyCode::Char('k') => {
+                            let i = state.selected().unwrap_or(0);
+                            state.select(Some(i.saturating_sub(1)));
+                        }
+                        KeyCode::Down | KeyCode::Char('j') => {
+                            let i = state.selected().unwrap_or(0);
+                            state.select(Some((i + 1).min(pairs.len() - 1)));
+                        }
+                        KeyCode::Enter => {
+                            let idx = state.selected().unwrap_or(0);
+                            return Ok(Some(pairs[idx].clone()));
+                        }
+                        KeyCode::Esc | KeyCode::Char('q') | KeyCode::Char('Q') => return Ok(None),
                         _ => {}
                     }
                 }

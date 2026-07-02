@@ -1768,6 +1768,15 @@ fn auto_spoof_main(
                     info!("auto_spoof: shutting down");
                     return Ok(());
                 }
+                Ok(tui::AutoSpoofAction::Pin) => {
+                    let mut terminal = tui::enter_tui()?;
+                    let result = tui::run_auto_spoof_pin_selection(&mut terminal, &domain_names, &pool)?;
+                    tui::leave_tui(terminal)?;
+                    if let Some((domain, ip)) = result {
+                        info!(%domain, %ip, "auto_spoof: pinned connection");
+                        pool.write().unwrap().fix_ip(ip);
+                    }
+                }
                 Err(e) => {
                     if let Some(h) = proxy_handle.take() { h.abort(); }
                     return Err(e);
