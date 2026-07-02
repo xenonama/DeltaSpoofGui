@@ -1770,7 +1770,7 @@ fn auto_spoof_main(
                 }
                 Ok(tui::AutoSpoofAction::Pin) => {
                     let mut terminal = tui::enter_tui()?;
-                    let result = tui::run_auto_spoof_pin_selection(&mut terminal, &domain_names, &pool)?;
+                    let result = tui::run_auto_spoof_pin_selection(&mut terminal, &domain_names, &pool, &byte_counters)?;
                     tui::leave_tui(terminal)?;
                     if let Some((domain, ip)) = result {
                         info!(%domain, %ip, "auto_spoof: pinned connection");

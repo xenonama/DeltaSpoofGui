@@ -3403,16 +3403,26 @@ pub fn run_auto_spoof_dashboard(
     }
 }
 
-/// Pin selection: show all domain:IP pairs, user picks one.
+/// Pin selection: show all active domain:IP connections with stats, sorted by total.
 pub fn run_auto_spoof_pin_selection(
     terminal: &mut Term,
     domains: &[String],
     pool: &std::sync::Arc<std::sync::RwLock<zerodpi_core::proxy::IpPool>>,
+    byte_counters: &zerodpi_core::proxy::IpByteCounters,
 ) -> anyhow::Result<Option<(String, IpAddr)>> {
     let active_ips = pool.read().unwrap().active_ips().to_vec();
-    let pairs: Vec<(String, IpAddr)> = domains.iter()
-        .flat_map(|d| active_ips.iter().map(move |&ip| (d.clone(), ip)))
-        .collect();
+
+    let mut pairs: Vec<(String, IpAddr, u64, u64, u64, u64, Duration)> = Vec::new();
+    for &ip in &active_ips {
+        let conns = byte_counters.connection_count(&ip);
+        let (total_up, total_down) = byte_counters.total_bytes(&ip);
+        let total = total_up + total_down;
+        let duration = pool.read().unwrap().start_time(&ip).elapsed();
+        for domain in domains {
+            pairs.push((domain.clone(), ip, total_up, total_down, total, conns, duration));
+        }
+    }
+    pairs.sort_by_key(|b| std::cmp::Reverse(b.4));
 
     if pairs.is_empty() {
         return Ok(None);
@@ -3437,19 +3447,30 @@ pub fn run_auto_spoof_pin_selection(
             let header = Paragraph::new(Line::from(vec![
                 Span::styled("Select a connection to pin (", label_style()),
                 Span::styled(pairs.len().to_string(), Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
-                Span::styled(" options)", label_style()),
+                Span::styled(" options, sorted by total)", label_style()),
             ])).block(Block::default().borders(Borders::ALL).title(" AutoSpoof — Pin Connection "));
             frame.render_widget(header, chunks[0]);
 
-            let rows: Vec<Row> = pairs.iter().map(|(domain, ip)| {
+            let rows: Vec<Row> = pairs.iter().map(|(domain, ip, cup, cdown, total, conns, duration)| {
+                let style = if *total == 0 {
+                    Style::default().fg(Color::Red)
+                } else {
+                    Style::default().fg(Color::Green)
+                };
                 Row::new(vec![
-                    Cell::from(format!("{}:{}", domain, ip)),
+                    Cell::from(format!("{}:{}", domain, ip)).style(style.add_modifier(Modifier::BOLD)),
+                    Cell::from(format!("{}/C", fmt_bytes(*cup))).style(Style::default().fg(Color::Cyan)),
+                    Cell::from(format!("{}/C", fmt_bytes(*cdown))).style(Style::default().fg(Color::Green)),
+                    Cell::from(fmt_bytes(*total)).style(Style::default().fg(Color::Yellow)),
+                    Cell::from(conns.to_string()),
+                    Cell::from(fmt_uptime(*duration)),
                 ])
             }).collect();
-            let widths = [Constraint::Min(30)];
+
+            let widths = [Constraint::Min(30), Constraint::Length(12), Constraint::Length(12), Constraint::Length(10), Constraint::Length(8), Constraint::Min(8)];
             let table = Table::new(rows, widths)
-                .header(Row::new(vec!["Connection (domain:IP)"]).style(Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD | Modifier::UNDERLINED)))
-                .block(Block::default().borders(Borders::ALL).title(" Connections "));
+                .header(Row::new(vec!["Connection (domain:IP)", "↑/Cycle", "↓/Cycle", "Total", "Conns", "Duration"]).style(Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD | Modifier::UNDERLINED)))
+                .block(Block::default().borders(Borders::ALL).title(" Active Connections "));
             frame.render_stateful_widget(table, chunks[1], &mut state);
 
             let footer = Paragraph::new(Line::from(vec![
@@ -3475,7 +3496,7 @@ pub fn run_auto_spoof_pin_selection(
                         }
                         KeyCode::Enter => {
                             let idx = state.selected().unwrap_or(0);
-                            return Ok(Some(pairs[idx].clone()));
+                            return Ok(Some((pairs[idx].0.clone(), pairs[idx].1)));
                         }
                         KeyCode::Esc | KeyCode::Char('q') | KeyCode::Char('Q') => return Ok(None),
                         _ => {}
