@@ -1353,6 +1353,8 @@ impl DomainIpCountersInner {
         for entry in self.cycle_download.iter() { entry.value().store(0, Ordering::Relaxed); }
     }
     pub fn reset_cycle_counters(&self) {
+        for entry in self.upload.iter() { entry.value().store(0, Ordering::Relaxed); }
+        for entry in self.download.iter() { entry.value().store(0, Ordering::Relaxed); }
         for entry in self.cycle_upload.iter() { entry.value().store(0, Ordering::Relaxed); }
         for entry in self.cycle_download.iter() { entry.value().store(0, Ordering::Relaxed); }
     }
