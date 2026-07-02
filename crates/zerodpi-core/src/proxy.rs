@@ -933,6 +933,8 @@ async fn copy_counting_dual(
     mut writer: tokio::net::tcp::OwnedWriteHalf,
     cumulative: Arc<AtomicU64>,
     cycle: Arc<AtomicU64>,
+    extra_cumulative: Option<Arc<AtomicU64>>,
+    extra_cycle: Option<Arc<AtomicU64>>,
 ) -> u64 {
     let mut buf = vec![0u8; 64 * 1024];
     let mut total = 0u64;
@@ -947,6 +949,8 @@ async fn copy_counting_dual(
         total += n as u64;
         cumulative.store(total, Ordering::Relaxed);
         cycle.fetch_add(n as u64, Ordering::Relaxed);
+        if let Some(ref ec) = extra_cumulative { ec.store(total, Ordering::Relaxed); }
+        if let Some(ref ec) = extra_cycle { ec.fetch_add(n as u64, Ordering::Relaxed); }
     }
     let _ = writer.shutdown().await;
     total
@@ -1469,8 +1473,8 @@ pub async fn run_find_ip_proxy(
             let (inc_rd, inc_wr) = incoming.into_split();
             let (out_rd, out_wr) = outgoing.into_split();
 
-            let mut c2s_task = tokio::spawn(copy_counting_dual(inc_rd, out_wr, upload_counter.clone(), cycle_upload));
-            let mut s2c_task = tokio::spawn(copy_counting_dual(out_rd, inc_wr, download_counter.clone(), cycle_download));
+            let mut c2s_task = tokio::spawn(copy_counting_dual(inc_rd, out_wr, upload_counter.clone(), cycle_upload, None, None));
+            let mut s2c_task = tokio::spawn(copy_counting_dual(out_rd, inc_wr, download_counter.clone(), cycle_download, None, None));
 
             let ticker = ev_tx.as_ref().map(|tx| {
                 let tx = tx.clone();
@@ -1683,8 +1687,8 @@ pub async fn run_auto_spoof_proxy(
 
             let (inc_rd, inc_wr) = incoming.into_split();
             let (out_rd, out_wr) = outgoing.into_split();
-            let mut c2s_task = tokio::spawn(copy_counting_dual(inc_rd, out_wr, upload_counter.clone(), cycle_upload));
-            let mut s2c_task = tokio::spawn(copy_counting_dual(out_rd, inc_wr, download_counter.clone(), cycle_download));
+            let mut c2s_task = tokio::spawn(copy_counting_dual(inc_rd, out_wr, upload_counter.clone(), cycle_upload, Some(dom_upload), Some(dom_cycle_upload)));
+            let mut s2c_task = tokio::spawn(copy_counting_dual(out_rd, inc_wr, download_counter.clone(), cycle_download, Some(dom_download), Some(dom_cycle_download)));
 
             if let Some(max_lifetime) = relay_max_lifetime {
                 let mut c2s_done: Option<u64> = None;
