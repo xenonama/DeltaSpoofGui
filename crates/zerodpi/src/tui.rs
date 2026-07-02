@@ -3275,6 +3275,7 @@ pub fn run_top_ip_selection(
 pub enum AutoSpoofAction {
     Quit,
     Pin,
+    ChangeRange,
 }
 
 pub fn run_auto_spoof_dashboard(
@@ -3381,7 +3382,9 @@ pub fn run_auto_spoof_dashboard(
 
             let footer = Paragraph::new(Line::from(vec![
                 Span::styled("s", Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)),
-                Span::styled(" pin connection   ", label_style()),
+                Span::styled(" pin   ", label_style()),
+                Span::styled("r", Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)),
+                Span::styled(" change range   ", label_style()),
                 Span::styled("q/Esc", Style::default().fg(Color::Red).add_modifier(Modifier::BOLD)),
                 Span::styled(" quit", label_style()),
             ])).block(Block::default().borders(Borders::ALL));
@@ -3395,6 +3398,7 @@ pub fn run_auto_spoof_dashboard(
                         KeyCode::Char('q') | KeyCode::Char('Q') | KeyCode::Esc => return Ok(AutoSpoofAction::Quit),
                         KeyCode::Char('c') if k.modifiers.contains(KeyModifiers::CONTROL) => return Ok(AutoSpoofAction::Quit),
                         KeyCode::Char('s') | KeyCode::Char('S') => return Ok(AutoSpoofAction::Pin),
+                        KeyCode::Char('r') | KeyCode::Char('R') => return Ok(AutoSpoofAction::ChangeRange),
                         _ => {}
                     }
                 }

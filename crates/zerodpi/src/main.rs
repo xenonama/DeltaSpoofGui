@@ -1777,6 +1777,11 @@ fn auto_spoof_main(
                         pool.write().unwrap().fix_ip(ip);
                     }
                 }
+                Ok(tui::AutoSpoofAction::ChangeRange) => {
+                    if let Some(h) = proxy_handle.take() { h.abort(); }
+                    info!("auto_spoof: changing range");
+                    break;
+                }
                 Err(e) => {
                     if let Some(h) = proxy_handle.take() { h.abort(); }
                     return Err(e);
