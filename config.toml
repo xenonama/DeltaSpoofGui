@@ -571,8 +571,28 @@ FIND_IP_DROP_COUNT = 5
 # ---------------------------------------------------------------------------
 # Number of domains to serve simultaneously.  Each IP connects to ALL domains.
 # Total connections = MAX_IP × MAX_DOMAIN.
-# Default: 1.
+# Default: 5.
 MAX_DOMAIN = 5
 
+# Maximum number of IPs in the pool.  Each IP connects to ALL domains.
+# Total connections = MAX_IP × MAX_DOMAIN.
+# Default: 10.
+MAX_IP = 10
+
+# Seconds per evaluation cycle.  Every this many seconds the proxy evaluates
+# bytes per (domain, IP) pair, removes dead connections, and replaces them
+# with top-scored candidates from the scan results.
+# Default: 10.
+IP_TEST_TIMEOUT_SECS = 10
+
+# When all active IPs have non-zero download bytes, remove the lowest
+# FIND_IP_DROP_COUNT IPs by total download bytes and replace with scanned ones.
+# Set to 0 to disable.
+# Default: 5.
+FIND_IP_DROP_COUNT = 5
+
 # Minimum total download bytes to consider an IP alive when not all have bytes.
+# IPs below this threshold are candidates for removal.
+# Default: 1024 (1 KB).
+FIND_IP_MIN_BYTES = 1024
 FIND_IP_MIN_BYTES = 1024
