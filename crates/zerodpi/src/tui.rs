@@ -3412,15 +3412,17 @@ pub fn run_auto_spoof_dashboard(
 /// Pin selection: show all active domain:IP connections with stats, sorted by total.
 pub fn run_auto_spoof_pin_selection(
     terminal: &mut Term,
-    seen_pairs: &[(String, IpAddr)],
     domain_counters: &zerodpi_core::proxy::DomainIpCounters,
 ) -> anyhow::Result<Option<(String, IpAddr)>> {
+    // Read ALL (domain, IP) pairs from domain_counters — this includes
+    // every pair that was ever connected, not just the current active ones.
     let mut pairs: Vec<(String, IpAddr, u64, u64, u64, u64)> = Vec::new();
-    for (domain, ip) in seen_pairs {
-        let conns = domain_counters.connection_count(domain, ip);
-        let (total_up, total_down) = domain_counters.total_bytes(domain, ip);
+    for entry in domain_counters.upload.iter() {
+        let (domain, ip) = entry.key().clone();
+        let conns = domain_counters.connection_count(&domain, &ip);
+        let (total_up, total_down) = domain_counters.total_bytes(&domain, &ip);
         let total = total_up + total_down;
-        pairs.push((domain.clone(), *ip, total_up, total_down, total, conns));
+        pairs.push((domain, ip, total_up, total_down, total, conns));
     }
     pairs.sort_by_key(|b| std::cmp::Reverse(b.4));
 
