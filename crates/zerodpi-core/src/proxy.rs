@@ -1536,7 +1536,7 @@ pub async fn run_auto_spoof_proxy(
     info!(%listen_addr, domains = ?domains, "auto_spoof: listening");
 
     let max_ip = cfg.MAX_IP;
-    let cycle_secs = cfg.IP_TEST_TIMEOUT_SECS;
+    let cycle_secs = cfg.AUTO_SPOOF_CYCLE_SECS;
     let scan_sni: Arc<str> = Arc::from(cfg.IP_SCAN_SNI.as_str());
     let scan_timeout = Duration::from_secs(cfg.SCAN_TIMEOUT_SECS);
 

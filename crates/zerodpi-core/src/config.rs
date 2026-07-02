@@ -480,6 +480,24 @@ pub struct Config {
     /// Default: `1024` (1 KB).
     #[serde(default = "default_find_ip_min_bytes")]
     pub FIND_IP_MIN_BYTES: u64,
+
+    // -----------------------------------------------------------------------
+    // auto_spoof mode (independent from find_ip)
+    // -----------------------------------------------------------------------
+    /// Seconds per evaluation cycle in auto_spoof mode.
+    /// Default: `10`.
+    #[serde(default = "default_auto_spoof_cycle_secs")]
+    pub AUTO_SPOOF_CYCLE_SECS: u64,
+
+    /// Max IPs to drop per cycle in auto_spoof mode.  Set to 0 to disable.
+    /// Default: `5`.
+    #[serde(default = "default_auto_spoof_drop_count")]
+    pub AUTO_SPOOF_DROP_COUNT: usize,
+
+    /// Minimum total bytes for an IP to be considered alive in auto_spoof mode.
+    /// Default: `1024`.
+    #[serde(default = "default_auto_spoof_min_bytes")]
+    pub AUTO_SPOOF_MIN_BYTES: u64,
 }
 
 fn empty_string_as_none<'de, D>(de: D) -> Result<Option<String>, D::Error>
@@ -608,6 +626,15 @@ fn default_find_ip_drop_count() -> usize {
     5
 }
 fn default_find_ip_min_bytes() -> u64 {
+    1024
+}
+fn default_auto_spoof_cycle_secs() -> u64 {
+    10
+}
+fn default_auto_spoof_drop_count() -> usize {
+    5
+}
+fn default_auto_spoof_min_bytes() -> u64 {
     1024
 }
 
