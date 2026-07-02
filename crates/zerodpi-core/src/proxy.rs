@@ -1619,11 +1619,12 @@ pub async fn run_auto_spoof_proxy(
     let cycle_find_tx = find_ip_event_tx.clone();
     let cycle_stats = stats.clone();
     let cycle_domains = domains.clone();
+    let cycle_domain_counters = domain_counters.clone();
     tokio::spawn(async move {
         auto_spoof_cycle_manager(
             cycle_cfg, cycle_pool, cycle_counters, cycle_candidates,
             cycle_find_tx, cycle_domains, scan_sni, scan_timeout,
-            max_ip, cycle_secs, cycle_stats,
+            max_ip, cycle_secs, cycle_stats, cycle_domain_counters,
         )
         .await;
     });
@@ -1718,12 +1719,15 @@ pub async fn run_auto_spoof_proxy(
     }
 }
 
-/// Cycle manager for auto_spoof mode.  Same logic as find_ip_cycle_manager
-/// but logs with "auto_spoof" prefix.
+/// Cycle manager for auto_spoof mode.
+///
+/// Evaluates per (domain, IP) pair.  `AUTO_SPOOF_DROP_COUNT` specifies how many
+/// pairs to drop (not IPs).  Since each IP serves all domains, dropping N pairs
+/// means removing `ceil(N / domains)` IPs from the pool.
 async fn auto_spoof_cycle_manager(
     cfg: Arc<Config>,
     pool: Arc<RwLock<IpPool>>,
-    byte_counters: IpByteCounters,
+    _byte_counters: IpByteCounters,
     candidate_ips: Vec<IpAddr>,
     find_ip_event_tx: Option<FindIpEventSender>,
     domains: Vec<String>,
@@ -1732,22 +1736,181 @@ async fn auto_spoof_cycle_manager(
     max_ip: usize,
     cycle_secs: u64,
     stats: Arc<std::sync::Mutex<CycleManagerStats>>,
+    domain_counters: DomainIpCounters,
 ) {
-    // Delegate to the same cycle logic as find_ip — the pool tracks IPs,
-    // and the proxy tracks domain assignment independently.
-    let cmc = CycleManagerConfig {
-        cfg,
-        candidate_ips,
-        pool,
-        byte_counters,
-        find_ip_event_tx,
-        scan_sni,
-        scan_timeout,
-        max_ip,
-        cycle_secs,
-        stats,
-    };
-    find_ip_cycle_manager(cmc).await;
+    use crate::ip_scanner::scan_ip_list;
+
+    let mut cycle_num: u64 = 0;
+    let mut pre_scanned: Vec<IpProbeEntry> = Vec::new();
+
+    let cycle_interval = Duration::from_secs(cycle_secs);
+    let drop_count = cfg.AUTO_SPOOF_DROP_COUNT;
+    let max_domain = domains.len();
+
+    // Start background scan.
+    let mut pending_scan: Option<tokio::task::JoinHandle<Vec<IpProbeEntry>>> = Some(
+        spawn_bg_scan(candidate_ips.clone(), pool.clone(), max_ip, cfg.clone(), scan_sni.clone(), scan_timeout)
+    );
+
+    loop {
+        // Phase 1: Collect scan results if available.
+        {
+            let finished = pending_scan.as_ref().map_or(false, |h| h.is_finished());
+            if finished {
+                if let Some(h) = pending_scan.take() {
+                    if let Ok(results) = h.await {
+                        let mut p = pool.write().unwrap();
+                        for entry in results {
+                            if p.active_count() >= max_ip {
+                                if !pre_scanned.iter().any(|e| e.ip == entry.ip) {
+                                    pre_scanned.push(entry);
+                                }
+                                continue;
+                            }
+                            if !p.active_ips().contains(&entry.ip) {
+                                p.add_ip(entry.ip);
+                                if let Some(ref tx) = find_ip_event_tx {
+                                    let _ = tx.send(FindIpEvent::IpAdded { ip: entry.ip, score: entry.score });
+                                }
+                            } else if !pre_scanned.iter().any(|e| e.ip == entry.ip) {
+                                pre_scanned.push(entry);
+                            }
+                        }
+                        pre_scanned.sort_by_key(|b| std::cmp::Reverse(b.score));
+                    }
+                }
+            }
+        }
+
+        // Phase 2: Sleep.
+        tokio::time::sleep(cycle_interval).await;
+
+        cycle_num += 1;
+
+        // Phase 3: Evaluate per (domain, IP) pair.
+        let active_ips = pool.read().unwrap().active_ips().to_vec();
+        if active_ips.is_empty() { continue; }
+
+        // Calculate per-pair totals and per-IP totals.
+        let mut pair_totals: Vec<(String, IpAddr, u64)> = Vec::new();
+        let mut ip_totals: std::collections::HashMap<IpAddr, u64> = std::collections::HashMap::new();
+
+        for &ip in &active_ips {
+            let mut ip_total: u64 = 0;
+            for domain in &domains {
+                let (_, down) = domain_counters.total_bytes(domain, &ip);
+                let total = down; // Use download as primary metric
+                pair_totals.push((domain.clone(), ip, total));
+                *ip_totals.entry(ip).or_insert(0) += total;
+            }
+        }
+
+        let any_has_bytes = pair_totals.iter().any(|(_, _, t)| *t > 0);
+
+        if any_has_bytes && drop_count > 0 {
+            // Drop the lowest-total pairs → find IPs to remove.
+            pair_totals.sort_by_key(|(_, _, t)| *t);
+            let to_drop_pairs = drop_count.min(pair_totals.len());
+
+            // Collect IPs that appear in dropped pairs.
+            let mut ips_to_remove: std::collections::HashSet<IpAddr> = std::collections::HashSet::new();
+            for (_, ip, _) in pair_totals.iter().take(to_drop_pairs) {
+                ips_to_remove.insert(*ip);
+            }
+
+            let dead_count = ips_to_remove.len();
+            if dead_count > 0 {
+                {
+                    let mut p = pool.write().unwrap();
+                    for ip in &ips_to_remove {
+                        p.remove_ip(ip);
+                    }
+                }
+                info!(cycle = cycle_num, dropped_pairs = to_drop_pairs, dropped_ips = dead_count, "auto_spoof: removed weak IPs");
+
+                // Replace with pre_scanned candidates.
+                let mut replaced = 0usize;
+                {
+                    let mut p = pool.write().unwrap();
+                    pre_scanned.retain(|entry| {
+                        if p.active_count() >= max_ip { return true; }
+                        if !p.active_ips().contains(&entry.ip) {
+                            p.add_ip(entry.ip);
+                            replaced += 1;
+                            if let Some(ref tx) = find_ip_event_tx {
+                                let _ = tx.send(FindIpEvent::IpAdded { ip: entry.ip, score: entry.score });
+                            }
+                            return false;
+                        }
+                        true
+                    });
+                    pre_scanned.sort_by_key(|b| std::cmp::Reverse(b.score));
+                }
+                info!(replaced, pre_scanned = pre_scanned.len(), "auto_spoof: cycle complete");
+            }
+        }
+
+        // Start next background scan.
+        if pending_scan.is_none() {
+            pending_scan = Some(spawn_bg_scan(
+                candidate_ips.clone(), pool.clone(), max_ip, cfg.clone(), scan_sni.clone(), scan_timeout,
+            ));
+        }
+    }
+}
+
+fn spawn_bg_scan(
+    candidate_ips: Vec<IpAddr>,
+    pool: Arc<RwLock<IpPool>>,
+    max_ip: usize,
+    cfg: Arc<Config>,
+    scan_sni: Arc<str>,
+    scan_timeout: Duration,
+) -> tokio::task::JoinHandle<Vec<IpProbeEntry>> {
+    use crate::ip_scanner::scan_ip_list;
+    let mut candidates = candidate_ips;
+    use std::collections::hash_map::DefaultHasher;
+    use std::hash::{Hash, Hasher};
+    let seed = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_nanos() as u64;
+    candidates.sort_by_key(|ip| {
+        let mut h = DefaultHasher::new();
+        ip.hash(&mut h);
+        seed.wrapping_add(h.finish())
+    });
+    let scan_limit = (max_ip * 20).min(candidates.len());
+    candidates.truncate(scan_limit);
+
+    {
+        let p = pool.read().unwrap();
+        candidates.retain(|ip| !p.active_ips().contains(ip));
+    }
+
+    let (scan_tx, mut scan_rx) = mpsc::unbounded_channel::<IpScanEvent>();
+
+    tokio::spawn(async move {
+        let handle = tokio::spawn(scan_ip_list(candidates, scan_sni, scan_timeout, cfg, Some(scan_tx)));
+        let mut results: Vec<IpProbeEntry> = Vec::new();
+        loop {
+            if handle.is_finished() {
+                while let Ok(event) = scan_rx.try_recv() {
+                    if let IpScanEvent::ProbeComplete(entry) = event {
+                        results.push(entry);
+                    }
+                }
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(500)).await;
+            while let Ok(event) = scan_rx.try_recv() {
+                if let IpScanEvent::ProbeComplete(entry) = event {
+                    results.push(entry);
+                }
+            }
+        }
+        results
+    })
 }
 
 /// Background cycle manager for find_ip mode.
@@ -1756,67 +1919,11 @@ async fn auto_spoof_cycle_manager(
 /// replaces them immediately from pre-scanned candidates, and periodically
 /// runs a full scan to refresh the candidate list.
 async fn find_ip_cycle_manager(cmc: CycleManagerConfig) {
-    use crate::ip_scanner::scan_ip_list;
-
     let mut cycle_num: u64 = 0;
     let cycle_interval = Duration::from_secs(cmc.cycle_secs);
 
     // Pre-scanned candidates (sorted by score desc).
     let mut pre_scanned: Vec<IpProbeEntry> = Vec::new();
-
-    // Start a background scan (non-blocking).
-    fn spawn_bg_scan(
-        candidate_ips: Vec<IpAddr>,
-        pool: Arc<RwLock<IpPool>>,
-        max_ip: usize,
-        cfg: Arc<Config>,
-        scan_sni: Arc<str>,
-        scan_timeout: Duration,
-    ) -> tokio::task::JoinHandle<Vec<IpProbeEntry>> {
-        let mut candidates = candidate_ips;
-        use std::collections::hash_map::DefaultHasher;
-        use std::hash::{Hash, Hasher};
-        let seed = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_nanos() as u64;
-        candidates.sort_by_key(|ip| {
-            let mut h = DefaultHasher::new();
-            ip.hash(&mut h);
-            seed.wrapping_add(h.finish())
-        });
-        let scan_limit = (max_ip * 20).min(candidates.len());
-        candidates.truncate(scan_limit);
-
-        {
-            let p = pool.read().unwrap();
-            candidates.retain(|ip| !p.active_ips().contains(ip));
-        }
-
-        let (scan_tx, mut scan_rx) = mpsc::unbounded_channel::<IpScanEvent>();
-
-        tokio::spawn(async move {
-            let handle = tokio::spawn(scan_ip_list(candidates, scan_sni, scan_timeout, cfg, Some(scan_tx)));
-            let mut results: Vec<IpProbeEntry> = Vec::new();
-            loop {
-                if handle.is_finished() {
-                    while let Ok(event) = scan_rx.try_recv() {
-                        if let IpScanEvent::ProbeComplete(entry) = event {
-                            results.push(entry);
-                        }
-                    }
-                    break;
-                }
-                tokio::time::sleep(Duration::from_millis(500)).await;
-                while let Ok(event) = scan_rx.try_recv() {
-                    if let IpScanEvent::ProbeComplete(entry) = event {
-                        results.push(entry);
-                    }
-                }
-            }
-            results
-        })
-    }
 
     // Start initial background scan.
     let mut pending_scan: Option<tokio::task::JoinHandle<Vec<IpProbeEntry>>> = Some(
