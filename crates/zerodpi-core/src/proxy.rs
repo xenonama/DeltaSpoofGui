@@ -1352,6 +1352,10 @@ impl DomainIpCountersInner {
         for entry in self.cycle_upload.iter() { entry.value().store(0, Ordering::Relaxed); }
         for entry in self.cycle_download.iter() { entry.value().store(0, Ordering::Relaxed); }
     }
+    pub fn reset_cycle_counters(&self) {
+        for entry in self.cycle_upload.iter() { entry.value().store(0, Ordering::Relaxed); }
+        for entry in self.cycle_download.iter() { entry.value().store(0, Ordering::Relaxed); }
+    }
 }
 
 pub fn new_domain_ip_counters() -> DomainIpCounters {
@@ -1849,6 +1853,9 @@ async fn auto_spoof_cycle_manager(
                 info!(replaced, pre_scanned = pre_scanned.len(), "auto_spoof: cycle complete");
             }
         }
+
+        // Reset cycle counters (↑/Cycle, ↓/Cycle) for the new cycle.
+        domain_counters.reset_cycle_counters();
 
         // Start next background scan.
         if pending_scan.is_none() {
