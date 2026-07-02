@@ -1628,8 +1628,8 @@ pub async fn run_auto_spoof_proxy(
         .await;
     });
 
-    // Domain round-robin index.
-    let domain_idx = std::sync::atomic::AtomicUsize::new(0);
+    // Unified round-robin counter across all (IP, domain) pairs.
+    let pair_idx = std::sync::atomic::AtomicUsize::new(0);
 
     loop {
         let (incoming, peer) = match listener.accept().await {
@@ -1641,18 +1641,17 @@ pub async fn run_auto_spoof_proxy(
         };
         debug!(%peer, "auto_spoof: accepted");
 
-        // Round-robin: pick the next IP and next domain.
-        let connect_ip = {
-            let mut p = pool.write().unwrap();
-            match p.next_ip() {
-                Some(ip) => ip,
-                None => {
-                    warn!("auto_spoof: pool empty, dropping connection");
-                    continue;
-                }
-            }
-        };
-        let dom_idx = domain_idx.fetch_add(1, std::sync::atomic::Ordering::Relaxed) % domains.len();
+        // Round-robin across all (IP × domain) combinations.
+        let pool_ips = pool.read().unwrap().active_ips().to_vec();
+        if pool_ips.is_empty() {
+            warn!("auto_spoof: pool empty, dropping connection");
+            continue;
+        }
+        let total_pairs = pool_ips.len() * domains.len();
+        let idx = pair_idx.fetch_add(1, std::sync::atomic::Ordering::Relaxed) % total_pairs;
+        let ip_idx = idx % pool_ips.len();
+        let dom_idx = idx / pool_ips.len();
+        let connect_ip = pool_ips[ip_idx];
         let connect_sni = domains[dom_idx].clone();
 
         let connect_addr = SocketAddr::new(connect_ip, CONNECT_PORT);
