@@ -43,31 +43,15 @@ use tracing::{debug, warn};
 /// First one to return results wins.
 pub async fn resolve_hostname(hostname: &str, timeout: Duration) -> Vec<Ipv4Addr> {
     let target = format!("{}:443", hostname);
+    // Cap DNS timeout at 3 seconds max (don't block entire probe on DNS).
+    let dns_timeout = timeout.min(Duration::from_secs(3));
 
-    // Fire all 3 DNS methods in parallel, take the first success.
+    // Fire tokio + hickory DNS in parallel, take the first success.
     let tokio_fut = {
         let target = target.clone();
-        let hostname = hostname.to_string();
         async move {
-            match tokio::time::timeout(timeout, tokio::net::lookup_host(&target)).await {
+            match tokio::time::timeout(dns_timeout, tokio::net::lookup_host(&target)).await {
                 Ok(Ok(addrs)) => {
-                    let v: Vec<Ipv4Addr> = addrs.filter_map(|sa| match sa.ip() {
-                        IpAddr::V4(v4) => Some(v4),
-                        _ => None,
-                    }).collect();
-                    if !v.is_empty() { Some(v) } else { None }
-                }
-                _ => None,
-            }
-        }
-    };
-
-    let std_fut = {
-        let target = target.clone();
-        async move {
-            use std::net::ToSocketAddrs;
-            match target.to_socket_addrs() {
-                Ok(addrs) => {
                     let v: Vec<Ipv4Addr> = addrs.filter_map(|sa| match sa.ip() {
                         IpAddr::V4(v4) => Some(v4),
                         _ => None,
@@ -85,7 +69,7 @@ pub async fn resolve_hostname(hostname: &str, timeout: Duration) -> Vec<Ipv4Addr
             use hickory_resolver::config::*;
             let config = ResolverConfig::google();
             let resolver = hickory_resolver::TokioAsyncResolver::tokio(config, ResolverOpts::default());
-            match tokio::time::timeout(timeout, resolver.ipv4_lookup(&hostname)).await {
+            match tokio::time::timeout(dns_timeout, resolver.ipv4_lookup(&hostname)).await {
                 Ok(Ok(ips)) => {
                     let v: Vec<Ipv4Addr> = ips.iter().map(|a| a.0).collect();
                     if !v.is_empty() { Some(v) } else { None }
@@ -97,7 +81,6 @@ pub async fn resolve_hostname(hostname: &str, timeout: Duration) -> Vec<Ipv4Addr
 
     tokio::select! {
         Some(v) = tokio_fut => v,
-        Some(v) = std_fut => v,
         Some(v) = hickory_fut => v,
         else => Vec::new(),
     }
