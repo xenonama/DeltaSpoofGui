@@ -21,7 +21,7 @@ LISTEN_PORT = 40443
 # ---------------------------------------------------------------------------
 
 # Operating mode. Valid values: "sni_spoof" (default), "ip_bypass",
-# "ip_bypass_plus", "sni_scan", "ip_scan", "proxy_scan".
+# "ip_bypass_plus", "sni_scan", "ip_scan", "proxy_scan", "find_ip", "auto_spoof".
 # - "sni_spoof"     — DPI bypass via SNI spoofing (default).
 # - "ip_bypass"     — plain TCP relay through a scanned IP; no packet interception.
 # - "ip_bypass_plus" — IPv4 relay through a scanned IP plus real-SNI-preserving
@@ -555,6 +555,11 @@ PROXY_TEST_SPEED_CAP_BPS = 2048000.0
 # The proxy distributes VPN traffic across up to this many IPs simultaneously.
 # Dead IPs (0 bytes in a cycle) are replaced with top-scored scan results.
 MAX_IP = 10
+
+# Number of domains to serve simultaneously (auto_spoof mode only).
+# Each IP connects to ALL domains. Total connections = MAX_IP × MAX_DOMAIN.
+# Default: 1.
+MAX_DOMAIN = 5
 
 # Seconds per evaluation cycle.  Every this many seconds the proxy evaluates
 # bytes per IP, removes dead connections, and replaces them with scanned
