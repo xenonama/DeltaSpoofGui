@@ -3470,7 +3470,8 @@ pub fn run_auto_spoof_pin_selection(
             let widths = [Constraint::Min(30), Constraint::Length(12), Constraint::Length(12), Constraint::Length(10), Constraint::Length(8), Constraint::Min(8)];
             let table = Table::new(rows, widths)
                 .header(Row::new(vec!["Connection (domain:IP)", "↑/Cycle", "↓/Cycle", "Total", "Conns", "Duration"]).style(Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD | Modifier::UNDERLINED)))
-                .block(Block::default().borders(Borders::ALL).title(" Active Connections "));
+                .block(Block::default().borders(Borders::ALL).title(" Active Connections "))
+                .row_highlight_style(Style::default().bg(Color::Blue).fg(Color::White).add_modifier(Modifier::BOLD));
             frame.render_stateful_widget(table, chunks[1], &mut state);
 
             let footer = Paragraph::new(Line::from(vec![
