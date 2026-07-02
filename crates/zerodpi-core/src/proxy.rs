@@ -1288,6 +1288,72 @@ pub fn new_ip_byte_counters() -> IpByteCounters {
     Arc::new(IpByteCountersInner::new())
 }
 
+// ---------------------------------------------------------------------------
+// Per-(domain, IP) counters for auto_spoof mode
+// ---------------------------------------------------------------------------
+
+type DomainIpKey = (String, IpAddr);
+
+pub struct DomainIpCountersInner {
+    pub upload: DashMap<DomainIpKey, Arc<AtomicU64>>,
+    pub download: DashMap<DomainIpKey, Arc<AtomicU64>>,
+    pub connections: DashMap<DomainIpKey, Arc<AtomicU64>>,
+    pub cycle_upload: DashMap<DomainIpKey, Arc<AtomicU64>>,
+    pub cycle_download: DashMap<DomainIpKey, Arc<AtomicU64>>,
+}
+
+pub type DomainIpCounters = Arc<DomainIpCountersInner>;
+
+impl DomainIpCountersInner {
+    pub fn new() -> Self {
+        Self {
+            upload: DashMap::new(),
+            download: DashMap::new(),
+            connections: DashMap::new(),
+            cycle_upload: DashMap::new(),
+            cycle_download: DashMap::new(),
+        }
+    }
+    fn key(domain: &str, ip: &IpAddr) -> DomainIpKey {
+        (domain.to_string(), *ip)
+    }
+    pub fn get_upload(&self, domain: &str, ip: &IpAddr) -> Arc<AtomicU64> {
+        self.upload.entry(Self::key(domain, ip)).or_insert_with(|| Arc::new(AtomicU64::new(0))).clone()
+    }
+    pub fn get_download(&self, domain: &str, ip: &IpAddr) -> Arc<AtomicU64> {
+        self.download.entry(Self::key(domain, ip)).or_insert_with(|| Arc::new(AtomicU64::new(0))).clone()
+    }
+    pub fn inc_connection(&self, domain: &str, ip: &IpAddr) {
+        self.connections.entry(Self::key(domain, ip)).or_insert_with(|| Arc::new(AtomicU64::new(0))).fetch_add(1, Ordering::Relaxed);
+    }
+    pub fn total_bytes(&self, domain: &str, ip: &IpAddr) -> (u64, u64) {
+        let k = Self::key(domain, ip);
+        let upload = self.upload.get(&k).map(|u| u.load(Ordering::Relaxed)).unwrap_or(0);
+        let download = self.download.get(&k).map(|d| d.load(Ordering::Relaxed)).unwrap_or(0);
+        (upload, download)
+    }
+    pub fn connection_count(&self, domain: &str, ip: &IpAddr) -> u64 {
+        let k = Self::key(domain, ip);
+        self.connections.get(&k).map(|c| c.load(Ordering::Relaxed)).unwrap_or(0)
+    }
+    pub fn cycle_upload_bytes(&self, domain: &str, ip: &IpAddr) -> u64 {
+        self.cycle_upload.get(&Self::key(domain, ip)).map(|u| u.load(Ordering::Relaxed)).unwrap_or(0)
+    }
+    pub fn cycle_download_bytes(&self, domain: &str, ip: &IpAddr) -> u64 {
+        self.cycle_download.get(&Self::key(domain, ip)).map(|d| d.load(Ordering::Relaxed)).unwrap_or(0)
+    }
+    pub fn reset_all_counters(&self) {
+        for entry in self.upload.iter() { entry.value().store(0, Ordering::Relaxed); }
+        for entry in self.download.iter() { entry.value().store(0, Ordering::Relaxed); }
+        for entry in self.cycle_upload.iter() { entry.value().store(0, Ordering::Relaxed); }
+        for entry in self.cycle_download.iter() { entry.value().store(0, Ordering::Relaxed); }
+    }
+}
+
+pub fn new_domain_ip_counters() -> DomainIpCounters {
+    Arc::new(DomainIpCountersInner::new())
+}
+
 /// Run the find_ip live proxy.
 ///
 /// Maintains up to `MAX_IP` concurrent outbound connections to `domain:443`
@@ -1523,6 +1589,7 @@ pub async fn run_auto_spoof_proxy(
     candidate_ips: Vec<IpAddr>,
     pool: Arc<RwLock<IpPool>>,
     byte_counters: IpByteCounters,
+    domain_counters: DomainIpCounters,
     event_tx: Option<ProxyEventSender>,
     find_ip_event_tx: Option<FindIpEventSender>,
     stats: Arc<std::sync::Mutex<CycleManagerStats>>,
@@ -1587,14 +1654,20 @@ pub async fn run_auto_spoof_proxy(
         let connect_addr = SocketAddr::new(connect_ip, CONNECT_PORT);
         let src_port = peer.port();
         let ev_tx = event_tx.clone();
+        let di_key = DomainIpCountersInner::key(&connect_sni, &connect_ip);
 
         emit(&ev_tx, ProxyEvent::ConnectionAccepted { peer, src_port });
 
         byte_counters.inc_connection(&connect_ip);
+        domain_counters.inc_connection(&connect_sni, &connect_ip);
         let upload_counter = byte_counters.get_upload(&connect_ip);
         let download_counter = byte_counters.get_download(&connect_ip);
         let cycle_upload = byte_counters.cycle_upload.entry(connect_ip).or_insert_with(|| Arc::new(AtomicU64::new(0))).clone();
         let cycle_download = byte_counters.cycle_download.entry(connect_ip).or_insert_with(|| Arc::new(AtomicU64::new(0))).clone();
+        let dom_upload = domain_counters.get_upload(&connect_sni, &connect_ip);
+        let dom_download = domain_counters.get_download(&connect_sni, &connect_ip);
+        let dom_cycle_upload = domain_counters.cycle_upload.entry(di_key.clone()).or_insert_with(|| Arc::new(AtomicU64::new(0))).clone();
+        let dom_cycle_download = domain_counters.cycle_download.entry(di_key).or_insert_with(|| Arc::new(AtomicU64::new(0))).clone();
 
         let relay_max_lifetime = configured_relay_max_lifetime(&cfg);
 

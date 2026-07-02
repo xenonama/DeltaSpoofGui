@@ -35,7 +35,7 @@ use zerodpi_core::ip_scanner::{load_ip_list, scan_ip_list, IpProbeEntry, IpScanE
 use zerodpi_core::methods::build_method;
 use zerodpi_core::net::default_interface_ipv4;
 use zerodpi_core::proxy::{
-    new_ip_byte_counters, run_auto_spoof_proxy, run_find_ip_proxy, run_ip_bypass_plus_proxy, run_ip_bypass_proxy,
+    new_ip_byte_counters, new_domain_ip_counters, run_auto_spoof_proxy, run_find_ip_proxy, run_ip_bypass_plus_proxy, run_ip_bypass_proxy,
     run_proxy, ActiveSniTarget, CycleManagerStats, FindIpEvent, IpPool, ProxyEvent,
     ProxyEventSender, RelayEndReason, CONNECT_PORT,
 };
@@ -1705,6 +1705,7 @@ fn auto_spoof_main(
 
         let pool = Arc::new(std::sync::RwLock::new(IpPool::new(initial_ips)));
         let byte_counters = new_ip_byte_counters();
+        let domain_counters = new_domain_ip_counters();
 
         let (event_tx, mut event_rx) = mpsc::unbounded_channel::<ProxyEvent>();
         let (find_ip_event_tx, mut find_ip_event_rx) = mpsc::unbounded_channel::<FindIpEvent>();
@@ -1718,6 +1719,7 @@ fn auto_spoof_main(
         let proxy_candidates = candidate_ips.clone();
         let proxy_pool = pool.clone();
         let proxy_counters = byte_counters.clone();
+        let proxy_domain_counters = domain_counters.clone();
         let proxy_stats = Arc::new(std::sync::Mutex::new(CycleManagerStats::new()));
 
         proxy_handle = Some(rt.spawn(async move {
@@ -1727,6 +1729,7 @@ fn auto_spoof_main(
                 proxy_candidates,
                 proxy_pool,
                 proxy_counters,
+                proxy_domain_counters,
                 Some(event_tx),
                 Some(find_ip_event_tx),
                 proxy_stats,
@@ -1759,6 +1762,7 @@ fn auto_spoof_main(
                 &cfg,
                 &pool,
                 &byte_counters,
+                &domain_counters,
             );
             tui::leave_tui(terminal)?;
 
@@ -1770,7 +1774,7 @@ fn auto_spoof_main(
                 }
                 Ok(tui::AutoSpoofAction::Pin) => {
                     let mut terminal = tui::enter_tui()?;
-                    let result = tui::run_auto_spoof_pin_selection(&mut terminal, &domain_names, &pool, &byte_counters)?;
+                    let result = tui::run_auto_spoof_pin_selection(&mut terminal, &domain_names, &pool, &domain_counters)?;
                     tui::leave_tui(terminal)?;
                     if let Some((domain, ip)) = result {
                         info!(%domain, %ip, "auto_spoof: pinned connection");

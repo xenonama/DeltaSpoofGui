@@ -3287,6 +3287,7 @@ pub fn run_auto_spoof_dashboard(
     cfg: &Config,
     pool: &std::sync::Arc<std::sync::RwLock<zerodpi_core::proxy::IpPool>>,
     byte_counters: &zerodpi_core::proxy::IpByteCounters,
+    domain_counters: &zerodpi_core::proxy::DomainIpCounters,
 ) -> anyhow::Result<AutoSpoofAction> {
     let start = Instant::now();
     let max_domain = domains.len();
@@ -3315,17 +3316,18 @@ pub fn run_auto_spoof_dashboard(
 
         let mut rows: Vec<(String, IpAddr, u64, u64, u64, u64, Duration)> = Vec::new();
         for &ip in &active_ips {
-            let conns = byte_counters.connection_count(&ip);
-            let (total_up, total_down) = byte_counters.total_bytes(&ip);
-            let total = total_up + total_down;
             let duration = {
                 let p = pool.read().unwrap();
                 p.start_time(&ip).elapsed()
             };
             for domain in domains {
+                let conns = domain_counters.connection_count(domain, &ip);
+                let (total_up, total_down) = domain_counters.total_bytes(domain, &ip);
+                let total = total_up + total_down;
                 rows.push((domain.clone(), ip, total_up, total_down, total, conns, duration));
             }
         }
+        rows.sort_by_key(|b| std::cmp::Reverse(b.4));
 
         let uptime = fmt_uptime(start.elapsed());
 
@@ -3412,17 +3414,17 @@ pub fn run_auto_spoof_pin_selection(
     terminal: &mut Term,
     domains: &[String],
     pool: &std::sync::Arc<std::sync::RwLock<zerodpi_core::proxy::IpPool>>,
-    byte_counters: &zerodpi_core::proxy::IpByteCounters,
+    domain_counters: &zerodpi_core::proxy::DomainIpCounters,
 ) -> anyhow::Result<Option<(String, IpAddr)>> {
     let active_ips = pool.read().unwrap().active_ips().to_vec();
 
     let mut pairs: Vec<(String, IpAddr, u64, u64, u64, u64, Duration)> = Vec::new();
     for &ip in &active_ips {
-        let conns = byte_counters.connection_count(&ip);
-        let (total_up, total_down) = byte_counters.total_bytes(&ip);
-        let total = total_up + total_down;
         let duration = pool.read().unwrap().start_time(&ip).elapsed();
         for domain in domains {
+            let conns = domain_counters.connection_count(domain, &ip);
+            let (total_up, total_down) = domain_counters.total_bytes(domain, &ip);
+            let total = total_up + total_down;
             pairs.push((domain.clone(), ip, total_up, total_down, total, conns, duration));
         }
     }
