@@ -590,4 +590,3 @@ AUTO_SPOOF_DROP_COUNT = 5
 # IPs below this threshold are candidates for removal.
 # Default: 1024 (1 KB).
 AUTO_SPOOF_MIN_BYTES = 1024
-FIND_IP_MIN_BYTES = 1024
