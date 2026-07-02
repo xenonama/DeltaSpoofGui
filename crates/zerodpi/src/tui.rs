@@ -3412,21 +3412,15 @@ pub fn run_auto_spoof_dashboard(
 /// Pin selection: show all active domain:IP connections with stats, sorted by total.
 pub fn run_auto_spoof_pin_selection(
     terminal: &mut Term,
-    domains: &[String],
-    pool: &std::sync::Arc<std::sync::RwLock<zerodpi_core::proxy::IpPool>>,
+    seen_pairs: &[(String, IpAddr)],
     domain_counters: &zerodpi_core::proxy::DomainIpCounters,
 ) -> anyhow::Result<Option<(String, IpAddr)>> {
-    let active_ips = pool.read().unwrap().active_ips().to_vec();
-
-    let mut pairs: Vec<(String, IpAddr, u64, u64, u64, u64, Duration)> = Vec::new();
-    for &ip in &active_ips {
-        let duration = pool.read().unwrap().start_time(&ip).elapsed();
-        for domain in domains {
-            let conns = domain_counters.connection_count(domain, &ip);
-            let (total_up, total_down) = domain_counters.total_bytes(domain, &ip);
-            let total = total_up + total_down;
-            pairs.push((domain.clone(), ip, total_up, total_down, total, conns, duration));
-        }
+    let mut pairs: Vec<(String, IpAddr, u64, u64, u64, u64)> = Vec::new();
+    for (domain, ip) in seen_pairs {
+        let conns = domain_counters.connection_count(domain, ip);
+        let (total_up, total_down) = domain_counters.total_bytes(domain, ip);
+        let total = total_up + total_down;
+        pairs.push((domain.clone(), *ip, total_up, total_down, total, conns));
     }
     pairs.sort_by_key(|b| std::cmp::Reverse(b.4));
 
@@ -3457,7 +3451,7 @@ pub fn run_auto_spoof_pin_selection(
             ])).block(Block::default().borders(Borders::ALL).title(" AutoSpoof — Pin Connection "));
             frame.render_widget(header, chunks[0]);
 
-            let rows: Vec<Row> = pairs.iter().map(|(domain, ip, cup, cdown, total, conns, duration)| {
+            let rows: Vec<Row> = pairs.iter().map(|(domain, ip, cup, cdown, total, conns)| {
                 let style = if *total == 0 {
                     Style::default().fg(Color::Red)
                 } else {
@@ -3469,14 +3463,13 @@ pub fn run_auto_spoof_pin_selection(
                     Cell::from(format!("{}/C", fmt_bytes(*cdown))).style(Style::default().fg(Color::Green)),
                     Cell::from(fmt_bytes(*total)).style(Style::default().fg(Color::Yellow)),
                     Cell::from(conns.to_string()),
-                    Cell::from(fmt_uptime(*duration)),
                 ])
             }).collect();
 
-            let widths = [Constraint::Min(30), Constraint::Length(12), Constraint::Length(12), Constraint::Length(10), Constraint::Length(8), Constraint::Min(8)];
+            let widths = [Constraint::Min(30), Constraint::Length(12), Constraint::Length(12), Constraint::Length(10), Constraint::Length(8)];
             let table = Table::new(rows, widths)
-                .header(Row::new(vec!["Connection (domain:IP)", "↑/Cycle", "↓/Cycle", "Total", "Conns", "Duration"]).style(Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD | Modifier::UNDERLINED)))
-                .block(Block::default().borders(Borders::ALL).title(" Active Connections "))
+                .header(Row::new(vec!["Connection (domain:IP)", "↑/Cycle", "↓/Cycle", "Total", "Conns"]).style(Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD | Modifier::UNDERLINED)))
+                .block(Block::default().borders(Borders::ALL).title(" All Connections "))
                 .row_highlight_style(Style::default().bg(Color::Blue).fg(Color::White).add_modifier(Modifier::BOLD));
             frame.render_stateful_widget(table, chunks[1], &mut state);
 

@@ -1493,6 +1493,9 @@ fn auto_spoof_main(
     let max_domain = cfg.MAX_DOMAIN;
     let max_ip = cfg.MAX_IP_AUTO_SPOOF;
 
+    // History of ALL (domain, IP) pairs ever seen across all cycles.
+    let mut seen_pairs: Vec<(String, IpAddr)> = Vec::new();
+
     let sni_list_path = {
         let raw = PathBuf::from(&cfg.SNI_LIST);
         if raw.is_absolute() {
@@ -1773,8 +1776,19 @@ fn auto_spoof_main(
                     return Ok(());
                 }
                 Ok(tui::AutoSpoofAction::Pin) => {
+                    // Update seen_pairs with current active pairs before showing selection.
+                    {
+                        let active_ips = pool.read().unwrap().active_ips().to_vec();
+                        for &ip in &active_ips {
+                            for domain in &domain_names {
+                                if !seen_pairs.iter().any(|(d, i)| d == domain && *i == ip) {
+                                    seen_pairs.push((domain.clone(), ip));
+                                }
+                            }
+                        }
+                    }
                     let mut terminal = tui::enter_tui()?;
-                    let result = tui::run_auto_spoof_pin_selection(&mut terminal, &domain_names, &pool, &domain_counters)?;
+                    let result = tui::run_auto_spoof_pin_selection(&mut terminal, &seen_pairs, &domain_counters)?;
                     tui::leave_tui(terminal)?;
                     if let Some((domain, ip)) = result {
                         info!(%domain, %ip, "auto_spoof: pinned connection");
