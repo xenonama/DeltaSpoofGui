@@ -556,11 +556,6 @@ PROXY_TEST_SPEED_CAP_BPS = 2048000.0
 # Dead IPs (0 bytes in a cycle) are replaced with top-scored scan results.
 MAX_IP = 10
 
-# Number of domains to serve simultaneously (auto_spoof mode only).
-# Each IP connects to ALL domains. Total connections = MAX_IP × MAX_DOMAIN.
-# Default: 1.
-MAX_DOMAIN = 5
-
 # Seconds per evaluation cycle.  Every this many seconds the proxy evaluates
 # bytes per IP, removes dead connections, and replaces them with scanned
 # candidates from the IP scanner.
@@ -570,6 +565,14 @@ IP_TEST_TIMEOUT_SECS = 10
 # FIND_IP_DROP_COUNT IPs by total download bytes and replace with scanned ones.
 # Set to 0 to disable.
 FIND_IP_DROP_COUNT = 5
+
+# ---------------------------------------------------------------------------
+# auto_spoof mode
+# ---------------------------------------------------------------------------
+# Number of domains to serve simultaneously.  Each IP connects to ALL domains.
+# Total connections = MAX_IP × MAX_DOMAIN.
+# Default: 1.
+MAX_DOMAIN = 5
 
 # Minimum total download bytes to consider an IP alive when not all have bytes.
 FIND_IP_MIN_BYTES = 1024
