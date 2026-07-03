@@ -1550,20 +1550,37 @@ fn auto_spoof_main(
             entries
         };
 
-        let selected_domains: Vec<SniProbeEntry> = if cfg.AUTO_SELECT || cfg.SELECTED_SNI.is_some() || no_tui {
-            let domains: Vec<SniProbeEntry> = sorted_entries.into_iter().take(max_domain).collect();
-            for d in &domains {
+        // ---- PHASE 1: SNI scan → select top N unique domains ----
+        // Always include www.hcaptcha.com, then fill remaining slots with
+        // top-scored unique domains from scan results.
+        let selected_domains: Vec<SniProbeEntry> = {
+            let mut selected: Vec<SniProbeEntry> = Vec::new();
+            let mut seen_snis: std::collections::HashSet<String> = std::collections::HashSet::new();
+
+            // First: find www.hcaptcha.com in results.
+            if let Some(hc) = sorted_entries.iter().find(|e| e.sni == "www.hcaptcha.com") {
+                selected.push(hc.clone());
+                seen_snis.insert("www.hcaptcha.com".to_string());
+            }
+
+            // Fill remaining slots with unique top-scored domains.
+            for entry in &sorted_entries {
+                if selected.len() >= max_domain { break; }
+                if !seen_snis.contains(&entry.sni) {
+                    seen_snis.insert(entry.sni.clone());
+                    selected.push(entry.clone());
+                }
+            }
+
+            // If www.hcaptcha.com wasn't in results, force-add the first entry.
+            if selected.is_empty() && !sorted_entries.is_empty() {
+                selected.push(sorted_entries[0].clone());
+            }
+
+            for d in &selected {
                 info!(sni = %d.sni, ip = %d.ip, score = d.score, "auto_spoof: selected domain");
             }
-            domains
-        } else {
-            let mut terminal = tui::enter_tui()?;
-            let result = tui::run_multi_domain_selection(&mut terminal, &sorted_entries, max_domain);
-            tui::leave_tui(terminal)?;
-            match result {
-                Ok(entries) => entries,
-                Err(e) => return Err(e).context("auto_spoof: domain selection"),
-            }
+            selected
         };
 
         if selected_domains.is_empty() {
