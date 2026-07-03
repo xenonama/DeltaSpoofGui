@@ -1796,7 +1796,13 @@ async fn auto_spoof_cycle_manager(
     );
 
     loop {
-        // Phase 1: Collect scan results if available.
+        // If pool is fixed (user pinned an IP), stop the cycle manager.
+        if pool.read().unwrap().is_fixed() {
+            debug!("auto_spoof: pool is fixed; cycle manager stopping");
+            break;
+        }
+
+        // Phase 1: Collect scan results if available (skip if fixed).
         {
             let finished = pending_scan.as_ref().map_or(false, |h| h.is_finished());
             if finished {
@@ -1827,6 +1833,11 @@ async fn auto_spoof_cycle_manager(
 
         // Phase 2: Sleep.
         tokio::time::sleep(cycle_interval).await;
+
+        if pool.read().unwrap().is_fixed() {
+            debug!("auto_spoof: pool is fixed after sleep; cycle manager stopping");
+            break;
+        }
 
         cycle_num += 1;
 
