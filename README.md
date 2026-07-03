@@ -12,9 +12,9 @@ It works on **Windows**, **Linux**, **Android/Termux**.
 
 | Platform | File | Format |
 |----------|------|--------|
-| **Windows x86_64** | [deltaspoof-windows-x86_64.zip](dist/deltaspoof-windows-x86_64.zip) | zip |
-| **Linux x86_64** | [deltaspoof-linux-x86_64.tar.gz](dist/deltaspoof-linux-x86_64.tar.gz) | tar.gz |
-| **Termux (Android aarch64)** | [deltaspoof-termux-aarch64.tar.gz](dist/deltaspoof-termux-aarch64.tar.gz) | tar.gz |
+| **Windows x86_64** | [deltaspoof-windows-x86_64.zip](https://github.com/Delta-Kronecker/DeltaSpoof/releases/download/v0.1.13/deltaspoof-windows-x86_64.zip) | zip |
+| **Linux x86_64** | [deltaspoof-linux-x86_64.tar.gz](https://github.com/Delta-Kronecker/DeltaSpoof/releases/download/v0.1.13/deltaspoof-linux-x86_64.tar.gz) | tar.gz |
+| **Termux (Android aarch64)** | [deltaspoof-termux-aarch64.tar.gz](https://github.com/Delta-Kronecker/DeltaSpoof/releases/download/v0.1.13/deltaspoof-termux-aarch64.tar.gz) | tar.gz |
 
 Each archive includes: binary + `config.toml` + `sni_list.txt` + `ip_list.txt`
 
