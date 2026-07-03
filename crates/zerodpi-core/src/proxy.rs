@@ -1793,6 +1793,35 @@ async fn auto_spoof_cycle_manager(
 
         cycle_num += 1;
 
+        // Phase 2b: Collect scan results that completed during sleep.
+        {
+            let finished = pending_scan.as_ref().map_or(false, |h| h.is_finished());
+            if finished {
+                if let Some(h) = pending_scan.take() {
+                    if let Ok(results) = h.await {
+                        let mut p = pool.write().unwrap();
+                        for entry in results {
+                            if p.active_count() >= max_ip {
+                                if !pre_scanned.iter().any(|e| e.ip == entry.ip) {
+                                    pre_scanned.push(entry);
+                                }
+                                continue;
+                            }
+                            if !p.active_ips().contains(&entry.ip) {
+                                p.add_ip(entry.ip);
+                                if let Some(ref tx) = find_ip_event_tx {
+                                    let _ = tx.send(FindIpEvent::IpAdded { ip: entry.ip, score: entry.score });
+                                }
+                            } else if !pre_scanned.iter().any(|e| e.ip == entry.ip) {
+                                pre_scanned.push(entry);
+                            }
+                        }
+                        pre_scanned.sort_by_key(|b| std::cmp::Reverse(b.score));
+                    }
+                }
+            }
+        }
+
         // Phase 3: Evaluate per (domain, IP) pair.
         let active_ips = pool.read().unwrap().active_ips().to_vec();
         if active_ips.is_empty() { continue; }
