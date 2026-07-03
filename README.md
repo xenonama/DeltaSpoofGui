@@ -8,6 +8,39 @@ It works on **Windows**, **Linux**, **Android/Termux**.
 
 ---
 
+## Download
+
+| Platform | File | Format |
+|----------|------|--------|
+| **Windows x86_64** | [deltaspoof-windows-x86_64.zip](dist/deltaspoof-windows-x86_64.zip) | zip |
+| **Linux x86_64** | [deltaspoof-linux-x86_64.tar.gz](dist/deltaspoof-linux-x86_64.tar.gz) | tar.gz |
+| **Termux (Android aarch64)** | [deltaspoof-termux-aarch64.tar.gz](dist/deltaspoof-termux-aarch64.tar.gz) | tar.gz |
+
+Each archive includes: binary + `config.toml` + `sni_list.txt` + `ip_list.txt`
+
+---
+
+## Quick Start
+
+1. Download and extract the archive for your platform
+2. Edit `config.toml` — set `MODE = "auto_spoof"` (or `find_ip`)
+3. Run:
+
+```powershell
+# Windows
+.\deltaspoof.exe
+
+# Linux
+chmod +x deltaspoof
+./deltaspoof
+
+# Termux
+chmod +x deltaspoof
+./deltaspoof
+```
+
+---
+
 ## Operating Modes
 
 | Mode | Description |
@@ -18,26 +51,31 @@ It works on **Windows**, **Linux**, **Android/Termux**.
 | `sni_scan` | Scan sni_list.txt and display results, then exit |
 | `ip_scan` | Scan ip_list.txt and display results, then exit |
 | `proxy_scan` | Test each working SNI through your V2RayN SOCKS5 port |
-| `find_ip` | Full workflow: SNI scan → domain → IP range → live proxy with dynamic pool |
-| **`auto_spoof`** | **Multi-domain live proxy: each IP serves ALL domains simultaneously** |
+| `find_ip` | Single-domain: SNI scan → domain → IP range → live proxy |
+| **`auto_spoof`** | **Multi-domain: each IP serves ALL domains simultaneously** |
 
 ---
 
-## auto_spoof Mode (New)
+## auto_spoof Mode
 
-The main new feature. Instead of a single domain, DeltaSpoof serves **multiple domains simultaneously** across a pool of IPs.
+The main mode. Multiple domains are served simultaneously across a pool of IPs.
+
+- **`www.hcaptcha.com` is always included** as the first domain
+- Remaining domains are auto-selected from scan results (unique, highest score)
+- `www.hcaptcha.com` is never duplicated
 
 ### How It Works
 
-1. **SNI Scan** — Scans candidate hostnames, auto-selects top `MAX_DOMAIN` domains
-2. **Select IP Range** — User picks a CIDR range from `ip_list.txt`
-3. **IP Scan** — Tests all IPs in the range
-4. **Live Proxy** — Creates `MAX_IP × MAX_DOMAIN` connections, distributes traffic via unified round-robin
+1. **SNI Scan** — Scans hostnames, auto-selects `www.hcaptcha.com` + top unique domains
+2. **IP Range Selection** — User picks CIDR from `ip_list.txt`
+3. **IP Scan** — Tests IPs in the range
+4. **Live Proxy** — `MAX_IP × MAX_DOMAIN` connections, unified round-robin
 5. **Cycle Evaluation** — Every `AUTO_SPOOF_CYCLE_SECS` seconds:
-   - Evaluates each (domain, IP) pair's download bytes
-   - Removes the `AUTO_SPOOF_DROP_COUNT` weakest pairs
-   - Replaces with scanned candidates from background scan
-6. **Pin Connection** — Press `s` to pin a specific (domain, IP) combination
+   - Evaluates per-(domain, IP) pair download bytes
+   - Drops `AUTO_SPOOF_DROP_COUNT` weakest pairs
+   - Replaces with scanned candidates
+   - Resets all counters for new cycle
+6. **Pin** — Press `s` to pin a connection (cycle manager stops)
 7. **Change Range** — Press `r` to change IP range
 
 ### Dashboard
@@ -56,18 +94,7 @@ s pin   r change range   q/Esc quit
 
 ### Pin Connection Menu
 
-Press `s` to see ALL (domain, IP) pairs ever used, sorted by Total:
-
-```
-┌ AutoSpoof — Pin Connection ────────────────────────────────────────┐
-│Select a connection to pin (50 options, sorted by total)           │
-├───────────────────────────────────────────────────────────────────┤
-│Connection (domain:IP)           ↑/Cycle   ↓/Cycle   Total  Conns │
-│www.hcaptcha.com:104.16.0.1      4.7K/C    17K/C     12K    3    │
-│cdnjs.com:104.16.0.1             4.6K/C    18K/C     12K    3    │
-│...                                                                │
-└───────────────────────────────────────────────────────────────────┘
-```
+Press `s` to see ALL (domain, IP) pairs ever used, sorted by Total. Pinning stops the cycle manager — the pinned IP stays.
 
 ---
 
@@ -98,43 +125,23 @@ s stop & pick   d change domain   r change IP range   q/Esc quit
 MODE = "auto_spoof"        # or "find_ip", "sni_spoof", etc.
 
 # --- find_ip mode ---
-MAX_IP = 10
-IP_TEST_TIMEOUT_SECS = 10
-FIND_IP_DROP_COUNT = 5
-FIND_IP_MIN_BYTES = 1024
+MAX_IP = 10                 # IPs in pool
+IP_TEST_TIMEOUT_SECS = 10   # cycle interval
+FIND_IP_DROP_COUNT = 5      # IPs to drop per cycle
+FIND_IP_MIN_BYTES = 1024    # min bytes to keep IP
 
 # --- auto_spoof mode ---
-MAX_DOMAIN = 5
-MAX_IP_AUTO_SPOOF = 10
-AUTO_SPOOF_CYCLE_SECS = 10
-AUTO_SPOOF_DROP_COUNT = 30    # pairs to drop per cycle
-AUTO_SPOOF_MIN_BYTES = 1024
+MAX_DOMAIN = 5              # domains served simultaneously
+MAX_IP_AUTO_SPOOF = 10      # IPs in pool
+AUTO_SPOOF_CYCLE_SECS = 10  # cycle interval
+AUTO_SPOOF_DROP_COUNT = 30  # pairs to drop per cycle
+AUTO_SPOOF_MIN_BYTES = 1024 # min bytes to keep IP
 
 # General
 SCAN_TIMEOUT_SECS = 5
 LISTEN_HOST = "127.0.0.1"
 LISTEN_PORT = 40443
-SELECTED_SNI = ""             # skip SNI scan if set
-```
-
----
-
-## Quick Start
-
-1. **Edit `config.toml`** — Set `MODE = "auto_spoof"` (or `find_ip`)
-2. **Fill `sni_list.txt`** with CDN hostnames
-3. **Fill `ip_list.txt`** with CIDR ranges
-4. **Run:**
-```powershell
-# Windows
-.\deltaspoof.exe --config .\config.toml
-
-# Linux
-sudo ./deltaspoof --config ./config.toml
-
-# Termux
-chmod +x deltaspoof-termux-aarch64
-./deltaspoof-termux-aarch64 --config ./config.toml
+SELECTED_SNI = ""           # skip SNI scan if set
 ```
 
 ---
