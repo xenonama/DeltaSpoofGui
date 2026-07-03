@@ -82,11 +82,11 @@ The main mode. Multiple domains are served simultaneously across a pool of IPs.
 
 ```
 ┌ DeltaSpoof — AutoSpoof Dashboard ──────────────────────────────────┐
-│Mode: auto_spoof   Domains: 5   IPs: 10   Connections: 50          │
+│Mode: auto_spoof   Domains: 5   IPs: 10   Connections: 50           │
 ├────────────────────────────────────────────────────────────────────┤
-│Connection (domain:IP)           ↑/Cycle   ↓/Cycle   Total  Conns  │
-│www.hcaptcha.com:104.16.0.1      4.7K/C    17K/C     12K    3      │
-│cdnjs.com:104.16.0.1             4.6K/C    18K/C     12K    3      │
+│Connection (domain:IP)           ↑/Cycle   ↓/Cycle   Total  Conns   │
+│www.hcaptcha.com:104.16.0.1      4.7K/C    17K/C     12K    3       │
+│cdnjs.com:104.16.0.1             4.6K/C    18K/C     12K    3       │
 │...                                                                 │
 └────────────────────────────────────────────────────────────────────┘
 s pin   r change range   q/Esc quit
@@ -106,11 +106,11 @@ Single-domain workflow: SNI scan → select domain → select IP range → test 
 
 ```
 ┌ DeltaSpoof — Find IP Dashboard ────────────────────────────────────┐
-│Mode: find_ip   SNI: www.hcaptcha.com                              │
-│Max IPs: 10   Active: 10   Uptime: 25s                             │
+│Mode: find_ip   SNI: www.hcaptcha.com                               │
+│Max IPs: 10   Active: 10   Uptime: 25s                              │
 ├────────────────────────────────────────────────────────────────────┤
-│IP Address        ↑/Cycle   ↓/Cycle   Total   Conns  Cycles  Dur  │
-│104.16.0.1        4.7K/C    17K/C     12K     5      2       25s  │
+│IP Address        ↑/Cycle   ↓/Cycle   Total   Conns  Cycles  Dur    │
+│104.16.0.1        4.7K/C    17K/C     12K     5      2       25s    │
 │...                                                                 │
 └────────────────────────────────────────────────────────────────────┘
 s stop & pick   d change domain   r change IP range   q/Esc quit
