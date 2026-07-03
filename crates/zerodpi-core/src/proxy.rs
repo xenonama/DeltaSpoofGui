@@ -1304,6 +1304,10 @@ pub struct DomainIpCountersInner {
     pub connections: DashMap<DomainIpKey, Arc<AtomicU64>>,
     pub cycle_upload: DashMap<DomainIpKey, Arc<AtomicU64>>,
     pub cycle_download: DashMap<DomainIpKey, Arc<AtomicU64>>,
+    /// Accumulated across all cycles (saved at end of each cycle before reset).
+    pub saved_upload: DashMap<DomainIpKey, Arc<AtomicU64>>,
+    pub saved_download: DashMap<DomainIpKey, Arc<AtomicU64>>,
+    pub saved_connections: DashMap<DomainIpKey, Arc<AtomicU64>>,
 }
 
 pub type DomainIpCounters = Arc<DomainIpCountersInner>;
@@ -1316,6 +1320,9 @@ impl DomainIpCountersInner {
             connections: DashMap::new(),
             cycle_upload: DashMap::new(),
             cycle_download: DashMap::new(),
+            saved_upload: DashMap::new(),
+            saved_download: DashMap::new(),
+            saved_connections: DashMap::new(),
         }
     }
     fn key(domain: &str, ip: &IpAddr) -> DomainIpKey {
@@ -1353,10 +1360,40 @@ impl DomainIpCountersInner {
         for entry in self.cycle_download.iter() { entry.value().store(0, Ordering::Relaxed); }
     }
     pub fn reset_cycle_counters(&self) {
+        // Save current values into cumulative before resetting.
+        for entry in self.upload.iter() {
+            let k = entry.key();
+            let val = entry.value().load(Ordering::Relaxed);
+            self.saved_upload.entry(k.clone()).or_insert_with(|| Arc::new(AtomicU64::new(0))).fetch_add(val, Ordering::Relaxed);
+        }
+        for entry in self.download.iter() {
+            let k = entry.key();
+            let val = entry.value().load(Ordering::Relaxed);
+            self.saved_download.entry(k.clone()).or_insert_with(|| Arc::new(AtomicU64::new(0))).fetch_add(val, Ordering::Relaxed);
+        }
+        for entry in self.connections.iter() {
+            let k = entry.key();
+            let val = entry.value().load(Ordering::Relaxed);
+            self.saved_connections.entry(k.clone()).or_insert_with(|| Arc::new(AtomicU64::new(0))).fetch_add(val, Ordering::Relaxed);
+        }
+        // Reset all counters.
         for entry in self.upload.iter() { entry.value().store(0, Ordering::Relaxed); }
         for entry in self.download.iter() { entry.value().store(0, Ordering::Relaxed); }
+        for entry in self.connections.iter() { entry.value().store(0, Ordering::Relaxed); }
         for entry in self.cycle_upload.iter() { entry.value().store(0, Ordering::Relaxed); }
         for entry in self.cycle_download.iter() { entry.value().store(0, Ordering::Relaxed); }
+    }
+    /// Get cumulative saved bytes across all cycles.
+    pub fn saved_total_bytes(&self, domain: &str, ip: &IpAddr) -> (u64, u64) {
+        let k = Self::key(domain, ip);
+        let up = self.saved_upload.get(&k).map(|v| v.load(Ordering::Relaxed)).unwrap_or(0);
+        let down = self.saved_download.get(&k).map(|v| v.load(Ordering::Relaxed)).unwrap_or(0);
+        (up, down)
+    }
+    /// Get cumulative saved connection count across all cycles.
+    pub fn saved_connection_count(&self, domain: &str, ip: &IpAddr) -> u64 {
+        let k = Self::key(domain, ip);
+        self.saved_connections.get(&k).map(|v| v.load(Ordering::Relaxed)).unwrap_or(0)
     }
 }
 

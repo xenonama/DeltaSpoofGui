@@ -3414,13 +3414,12 @@ pub fn run_auto_spoof_pin_selection(
     terminal: &mut Term,
     domain_counters: &zerodpi_core::proxy::DomainIpCounters,
 ) -> anyhow::Result<Option<(String, IpAddr)>> {
-    // Read ALL (domain, IP) pairs from domain_counters — this includes
-    // every pair that was ever connected, not just the current active ones.
+    // Read ALL pairs from domain_counters saved history.
     let mut pairs: Vec<(String, IpAddr, u64, u64, u64, u64)> = Vec::new();
-    for entry in domain_counters.upload.iter() {
+    for entry in domain_counters.saved_upload.iter() {
         let (domain, ip) = entry.key().clone();
-        let conns = domain_counters.connection_count(&domain, &ip);
-        let (total_up, total_down) = domain_counters.total_bytes(&domain, &ip);
+        let conns = domain_counters.saved_connection_count(&domain, &ip);
+        let (total_up, total_down) = domain_counters.saved_total_bytes(&domain, &ip);
         let total = total_up + total_down;
         pairs.push((domain, ip, total_up, total_down, total, conns));
     }
