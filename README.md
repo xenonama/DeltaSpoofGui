@@ -45,14 +45,14 @@ chmod +x deltaspoof
 
 | Mode | Description |
 |------|-------------|
+| **`auto_spoof (New)`** | **Multi-domain: each IP serves ALL domains simultaneously** |
+| `find_ip(New)` | Single-domain: SNI scan → domain → IP range → live proxy |
 | `sni_spoof` | DPI bypass via SNI spoofing (default ZeroDPI mode) |
 | `ip_bypass` | Plain TCP relay through a scanned IP |
 | `ip_bypass_plus` | IPv4 relay with real-SNI-preserving bypass method |
 | `sni_scan` | Scan sni_list.txt and display results, then exit |
 | `ip_scan` | Scan ip_list.txt and display results, then exit |
 | `proxy_scan` | Test each working SNI through your V2RayN SOCKS5 port |
-| `find_ip` | Single-domain: SNI scan → domain → IP range → live proxy |
-| **`auto_spoof`** | **Multi-domain: each IP serves ALL domains simultaneously** |
 
 ---
 
