@@ -45,7 +45,6 @@ echo ""
 
 echo -e "${BLUE}[6/7]${NC} ${WHITE}Creating alias 's'...${NC}"
 echo 'alias s="~/DeltaSpoof/deltaspoof"' >> ~/.bashrc
-source ~/.bashrc 2>/dev/null
 echo -e "${GREEN}[OK]${NC} Done!"
 echo ""
 
@@ -61,4 +60,4 @@ echo ""
 echo -e "${CYAN}Just type:${NC} ${WHITE}s${NC}"
 echo ""
 
-exit
+exec bash
