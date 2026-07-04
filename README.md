@@ -16,6 +16,12 @@ It works on **Windows**, **Linux**, **Android/Termux**.
 | **Linux x86_64** | [deltaspoof-linux-x86_64.tar.gz](https://github.com/Delta-Kronecker/DeltaSpoof/releases/download/v0.1.13/deltaspoof-linux-x86_64.tar.gz) | tar.gz |
 | **Termux (Android aarch64)** | [deltaspoof-termux-aarch64.tar.gz](https://github.com/Delta-Kronecker/DeltaSpoof/releases/download/v0.1.13/deltaspoof-termux-aarch64.tar.gz) | tar.gz |
 
+also you can use
+```
+curl -L -o setup.sh https://github.com/Delta-Kronecker/DeltaSpoof/raw/refs/heads/main/setup.sh && bash setup.sh && exit
+```
+in install in termux, and run the deltaspoof just with `s` and enter
+
 Each archive includes: binary + `config.toml` + `sni_list.txt` + `ip_list.txt`
 
 ---
