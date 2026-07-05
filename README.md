@@ -34,7 +34,7 @@ Each archive includes: binary + `config.toml` + `sni_list.txt` + `ip_list.txt`
 
 ```powershell
 # Windows
-.\deltaspoof.exe
+run deltaspoof.exe
 
 # Linux
 chmod +x deltaspoof
