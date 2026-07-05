@@ -20,7 +20,7 @@ also you can use
 ```
 curl -L -o setup.sh https://github.com/Delta-Kronecker/DeltaSpoof/raw/refs/heads/main/setup.sh && bash setup.sh && exit
 ```
-in install in termux, and run the deltaspoof just with `s` and enter
+to install in termux, and run the deltaspoof just with `s` and enter
 
 Each archive includes: binary + `config.toml` + `sni_list.txt` + `ip_list.txt`
 
