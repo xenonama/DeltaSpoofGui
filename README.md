@@ -4,7 +4,6 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/Python-3.8+-blue.svg)](https://python.org)
-[![Electron](https://img.shields.io/badge/Electron-28.0+-purple.svg)](https://electronjs.org)
 
 ## ✨ ویژگی‌ها
 
