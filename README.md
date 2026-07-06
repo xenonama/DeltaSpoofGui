@@ -24,7 +24,7 @@
 
 ### روش ۲: اجرا از سورس کد
 ```bash
-git clone https://github.com/your-username/DeltaSpoofGui.git
+git clone https://github.com/xenonama/DeltaSpoofGui.git
 cd DeltaSpoofGui
 pip install -r backend/requirements.txt
 python run.py
